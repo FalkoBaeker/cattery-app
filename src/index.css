@@ -1,0 +1,242 @@
+@import 'tailwindcss';
+
+/* ------------------------------------------------------------------ */
+/*  Farbwelt                                                           */
+/*                                                                     */
+/*  Ruhige Blaugrautöne — passend zur Rasse und angenehm bei Nacht.    */
+/*  In Komponenten ausschließlich diese semantischen Marken verwenden, */
+/*  niemals Tailwind-Grundfarben wie `bg-gray-100`.                    */
+/* ------------------------------------------------------------------ */
+
+@theme {
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, system-ui, sans-serif;
+
+  /* Hell */
+  --color-bg: oklch(98.4% 0.003 250);
+  --color-surface: oklch(100% 0 0);
+  --color-surface-2: oklch(96.5% 0.004 250);
+  --color-surface-3: oklch(93.5% 0.006 250);
+  --color-border: oklch(90% 0.006 250);
+  --color-border-strong: oklch(82% 0.008 250);
+  --color-text: oklch(21% 0.012 250);
+  --color-text-dim: oklch(48% 0.012 250);
+  --color-text-faint: oklch(63% 0.01 250);
+
+  --color-accent: oklch(52% 0.09 245);
+  --color-accent-hover: oklch(46% 0.095 245);
+  --color-accent-soft: oklch(94% 0.022 245);
+  --color-on-accent: oklch(100% 0 0);
+
+  --color-ok: oklch(52% 0.13 152);
+  --color-ok-soft: oklch(94.5% 0.04 152);
+  --color-warn: oklch(62% 0.13 70);
+  --color-warn-soft: oklch(95.5% 0.055 85);
+  --color-alert: oklch(55% 0.19 27);
+  --color-alert-soft: oklch(95% 0.035 27);
+
+  --radius-card: 0.875rem;
+  --radius-field: 0.75rem;
+
+  --shadow-card: 0 1px 2px oklch(0% 0 0 / 0.05), 0 1px 3px oklch(0% 0 0 / 0.04);
+  --shadow-raised: 0 4px 16px oklch(0% 0 0 / 0.1), 0 1px 3px oklch(0% 0 0 / 0.06);
+  --shadow-sheet: 0 -8px 40px oklch(0% 0 0 / 0.18);
+}
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  /* Dunkel: automatisch nach Systemeinstellung … */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme='light']) {
+      color-scheme: dark;
+      --color-bg: oklch(16% 0.008 250);
+      --color-surface: oklch(20.5% 0.009 250);
+      --color-surface-2: oklch(24.5% 0.01 250);
+      --color-surface-3: oklch(29% 0.011 250);
+      --color-border: oklch(30% 0.011 250);
+      --color-border-strong: oklch(40% 0.013 250);
+      --color-text: oklch(95% 0.004 250);
+      --color-text-dim: oklch(72% 0.01 250);
+      --color-text-faint: oklch(56% 0.011 250);
+
+      --color-accent: oklch(70% 0.1 245);
+      --color-accent-hover: oklch(76% 0.1 245);
+      --color-accent-soft: oklch(29% 0.035 245);
+      --color-on-accent: oklch(15% 0.01 250);
+
+      --color-ok: oklch(72% 0.14 152);
+      --color-ok-soft: oklch(27% 0.045 152);
+      --color-warn: oklch(80% 0.13 80);
+      --color-warn-soft: oklch(29% 0.05 80);
+      --color-alert: oklch(69% 0.17 25);
+      --color-alert-soft: oklch(28% 0.06 25);
+
+      --shadow-card: 0 1px 2px oklch(0% 0 0 / 0.3);
+      --shadow-raised: 0 4px 20px oklch(0% 0 0 / 0.45);
+      --shadow-sheet: 0 -8px 40px oklch(0% 0 0 / 0.55);
+    }
+  }
+
+  /* … und per Schalter in den Einstellungen, der immer gewinnt. */
+  :root[data-theme='dark'] {
+    color-scheme: dark;
+    --color-bg: oklch(16% 0.008 250);
+    --color-surface: oklch(20.5% 0.009 250);
+    --color-surface-2: oklch(24.5% 0.01 250);
+    --color-surface-3: oklch(29% 0.011 250);
+    --color-border: oklch(30% 0.011 250);
+    --color-border-strong: oklch(40% 0.013 250);
+    --color-text: oklch(95% 0.004 250);
+    --color-text-dim: oklch(72% 0.01 250);
+    --color-text-faint: oklch(56% 0.011 250);
+
+    --color-accent: oklch(70% 0.1 245);
+    --color-accent-hover: oklch(76% 0.1 245);
+    --color-accent-soft: oklch(29% 0.035 245);
+    --color-on-accent: oklch(15% 0.01 250);
+
+    --color-ok: oklch(72% 0.14 152);
+    --color-ok-soft: oklch(27% 0.045 152);
+    --color-warn: oklch(80% 0.13 80);
+    --color-warn-soft: oklch(29% 0.05 80);
+    --color-alert: oklch(69% 0.17 25);
+    --color-alert-soft: oklch(28% 0.06 25);
+
+    --shadow-card: 0 1px 2px oklch(0% 0 0 / 0.3);
+    --shadow-raised: 0 4px 20px oklch(0% 0 0 / 0.45);
+    --shadow-sheet: 0 -8px 40px oklch(0% 0 0 / 0.55);
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    overscroll-behavior-y: none;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none;
+    user-select: none;
+    touch-action: manipulation;
+  }
+
+  input,
+  textarea,
+  select,
+  [contenteditable],
+  .selectable {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
+  /* iOS zoomt beim Fokus, wenn die Schrift unter 16px liegt. */
+  input,
+  textarea,
+  select {
+    font-size: max(16px, 1rem);
+    font-family: inherit;
+  }
+
+  button {
+    font-family: inherit;
+    touch-action: manipulation;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  input[type='number']::-webkit-outer-spin-button,
+  input[type='number']::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type='number'] {
+    -moz-appearance: textfield;
+  }
+}
+
+@layer utilities {
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .scroll-x {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .animate-fade-in {
+    animation: fade-in 0.15s ease-out;
+  }
+  .animate-sheet-in {
+    animation: sheet-in 0.24s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  .animate-toast-in {
+    animation: toast-in 0.2s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@keyframes sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
