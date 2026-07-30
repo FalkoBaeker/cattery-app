@@ -1,0 +1,145 @@
+VERTRAGSVORLAGE A — STANDARDKAUFVERTRAG
+=======================================
+
+Quelle: der vorliegende Originalvertrag der Züchterin, wortgetreu übernommen.
+Alle personenbezogenen Angaben und die Bankverbindung sind durch Platzhalter
+ersetzt, weil dieses Verzeichnis öffentlich ausgeliefert wird. Die echten Werte
+trägt die Nutzerin einmalig in den Einstellungen ein; sie liegen nur auf dem Gerät.
+
+PLATZHALTER
+-----------
+{{tierzahlWort}}      Zahlwort: "ein", "zwei", "drei" …
+{{tierWortPl}}        "Kitten" (unverändert in Ein- und Mehrzahl)
+{{rasse}}             "Russisch Blau"
+{{vk.name}} {{vk.anschrift}} {{vk.gebDatum}} {{vk.iban}} {{vk.ort}}
+{{kaeufer.name}}      ein Name oder "A und B" bzw. "A, B und C"
+{{kaeufer.anschrift}} {{kaeufer.gebDatum}}
+{{tiere[].chip}} {{tiere[].name}}
+{{gebDatum}}          Geburtsdatum der Tiere
+{{preis}} {{anzahlung}} {{restsumme}}
+{{uebergabeOrt}} {{uebergabeTermin}}   Termin ist FREIER TEXT ("Anfang Juni 2026")
+{{zusatz}}            optionaler Schlussparagraf
+
+GRAMMATIK-SCHALTER
+------------------
+[EZ:…|MZ:…]     Ein-/Mehrzahl der Tiere
+[K1M:…|K1W:…|KN:…]  ein männlicher / eine weibliche / mehrere Käufer
+{{nurMehrereKaeufer}} … {{/nurMehrereKaeufer}}   Absatz entfällt bei einem Käufer
+
+---------------------------------------------------------------------------
+TEXT
+---------------------------------------------------------------------------
+
+Kaufvertrag über {{tierzahlWort}} [EZ:Kitten|MZ:{{tierzahlWort}} Kitten] der Rasse {{rasse}}
+
+zwischen
+
+Verkäuferin:
+Name: {{vk.name}}
+Anschrift: {{vk.anschrift}}
+Geb.-Datum: {{vk.gebDatum}}
+
+und
+
+[K1M:Käufer|K1W:Käuferin|KN:Käufer]:
+Name: {{kaeufer.name}}
+Anschrift: {{kaeufer.anschrift}}
+Geb. am: {{kaeufer.gebDatum}}
+
+
+§ 1 Vertragsgegenstand
+
+Die Verkäuferin veräußert {{tierzahlWort}} [EZ:reinrassiges|MZ:reinrassige] {{rasse}}-[EZ:Kitten|MZ:Kitten].
+
+{{#tiere}}
+Chipnummer: {{chip}} ({{name}})
+{{/tiere}}
+Geboren am: {{gebDatum}}
+
+[EZ:Das Kitten ist|MZ:Die Kitten sind] bis zum Übergabetermin mindestens zweifach geimpft,
+kastriert, mehrfach entwurmt und [EZ:wurde|MZ:wurden] tierärztlich untersucht. Ein
+tierärztliches Attest wird vor Abgabe zur Einsicht vorgelegt. Je ein Stammbaum
+des Zuchtvereins {{verein}} wird mitgegeben.
+
+
+§ 2 Kaufpreis & Zahlungsbedingungen
+
+Gesamtkaufpreis: {{preis}}
+{{#anzahlung}}
+Anzahlung: {{anzahlung}} geleistet
+Restsumme: {{restsumme}}
+{{/anzahlung}}
+
+Die {{#anzahlung}}Restsumme{{/anzahlung}}{{^anzahlung}}Kaufsumme{{/anzahlung}} wird vor
+Abholung auf das Konto von {{vk.name}}: {{vk.iban}} überwiesen.
+
+
+§ 3 Übergabe & Gefahrübergang
+
+Übergabeort: {{uebergabeOrt}} - am: {{uebergabeTermin}}
+oder nach Vereinbarung. Mit Übergabe und vollständiger Kaufpreiszahlung gehen
+Besitz und Gefahr auf [K1M:den Käufer|K1W:die Käuferin|KN:die Käufer] über.
+
+
+§ 4 Gesundheitsstatus & Rügepflicht
+
+[EZ:Das Kitten wurde|MZ:Die Kitten wurden] von [K1M:dem Käufer|K1W:der Käuferin|KN:den Käufern] am Tag der
+Abholung besichtigt und in gesundem, augenscheinlich mangelfreiem Zustand
+übernommen.
+
+Offenkundige Mängel sind binnen 48 Stunden schriftlich anzuzeigen; versteckte
+Mängel unverzüglich nach Entdeckung.
+
+Beim Privatverkauf sind weitergehende Gewährleistungsrechte ausdrücklich
+ausgeschlossen, soweit gesetzlich zulässig (§ 444 BGB).
+
+
+§ 5 Pflichten [K1M:des Käufers|K1W:der Käuferin|KN:der Käufer]
+
+[K1M:Der Käufer verpflichtet sich|K1W:Die Käuferin verpflichtet sich|KN:Die Käufer verpflichten sich], die
+[EZ:Katze|MZ:Katzen] jederzeit art- und tierschutzgerecht zu halten und
+[EZ:ihr|MZ:ihnen] eine liebevolle, [EZ:ihrer|MZ:ihrer] Rasse angemessene Versorgung
+zukommen zu lassen. [K1M:Er versichert|K1W:Sie versichert|KN:Sie versichern] ferner, die
+[EZ:Katze|MZ:Katzen] weder zu misshandeln noch zu vernachlässigen und
+[EZ:sie|MZ:sie] insbesondere nicht in ein Tierheim abzugeben. Die von der
+Verkäuferin erteilten Fütterungsempfehlungen [K1M:hat der Käufer|K1W:hat die Käuferin|KN:haben die Käufer]
+erhalten, zur Kenntnis genommen und [K1M:verpflichtet sich|K1W:verpflichtet sich|KN:verpflichten sich],
+diese bei der Ernährung der [EZ:Katze|MZ:Katzen] angemessen zu berücksichtigen.
+Bei Erkrankung ist eine tierärztliche Versorgung jederzeit sicherzustellen.
+
+
+§ 6 Haftungsausschluss
+
+Für leichte Fahrlässigkeit haftet die Verkäuferin – außer bei Verletzung von
+Leben, Körper oder Gesundheit – nicht. Die Haftung für Vorsatz und grobe
+Fahrlässigkeit bleibt unberührt.
+
+
+§ 7 Salvatorische Klausel
+
+Sollten einzelne Bestimmungen dieses Vertrags unwirksam sein oder werden,
+bleibt die Wirksamkeit der übrigen Regelungen unberührt. Die Parteien
+verpflichten sich, eine wirtschaftlich möglichst gleichwertige, zulässige
+Ersatzregelung zu vereinbaren.
+
+
+§ 8 Unterlagen (bei Übergabe ausgehändigt):
+
+- EU Heimtierausweis
+- Stammbaum
+
+
+{{#zusatz}}
+§ 9 Ergänzende Vereinbarungen
+
+{{zusatz}}
+{{/zusatz}}
+
+
+_______________________________
+Ort, Datum
+
+
+______________________________          ______________________________
+{{vk.name}}                              {{kaeufer.name}}
+Verkäuferin                              [K1M:Käufer|K1W:Käuferin|KN:Käufer]
