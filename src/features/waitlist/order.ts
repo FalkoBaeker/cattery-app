@@ -14,6 +14,7 @@
 import type { ID, ISODate, ISODateTime, Interest, InterestStatus, WishSex } from '../../types';
 import { addDays, dateOf, daysBetween, todayISO } from '../../lib/date';
 import { toWhatsAppNumber } from '../../lib/format';
+import { interestWishSexes } from './model';
 
 /* ================================================================== */
 /*  Reihenfolge                                                        */
@@ -403,7 +404,7 @@ export function filterInterests<T extends Interest>(
 ): T[] {
   return items.filter(
     (i) =>
-      matchesSex(i.wishSex, filter.sex) &&
+      interestWishSexes(i).some((wish) => matchesSex(wish, filter.sex)) &&
       (filter.status === 'all' || i.status === filter.status) &&
       matchesQuery(i, filter.query),
   );

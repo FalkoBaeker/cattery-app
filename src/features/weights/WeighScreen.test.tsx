@@ -101,6 +101,80 @@ describe('WeighScreen', () => {
     expect((rot as HTMLInputElement).value).toBe('');
   });
 
+  it('verliert eine Eingabe bei einem Datenbankfehler nicht und lässt sie erneut speichern', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(db.weights, 'add').mockRejectedValueOnce(new Error('IndexedDB vorübergehend belegt'));
+    renderScreen();
+
+    const rot = (await screen.findByLabelText('Gewicht von Rot in Gramm')) as HTMLInputElement;
+    await user.click(rot);
+    await user.keyboard('95{Enter}');
+
+    expect(await screen.findByText('Das Gewicht konnte nicht gespeichert werden.')).toBeInTheDocument();
+    expect(rot.value).toBe('95');
+    expect(await db.weights.count()).toBe(0);
+
+    await user.click(rot);
+    await user.keyboard('{Enter}');
+    await waitFor(async () => expect(await db.weights.count()).toBe(1));
+    expect((await db.weights.toArray())[0].grams).toBe(95);
+  });
+
+  it('behält einen schnell erfassten ganzen Wurf auch nach dem Neuöffnen vollständig', async () => {
+    const user = userEvent.setup();
+    const firstRender = renderScreen();
+
+    const rot = await screen.findByLabelText('Gewicht von Rot in Gramm');
+    await user.click(rot);
+    await user.keyboard('95{Enter}101{Enter}98{Enter}');
+    await waitFor(async () => expect(await db.weights.count()).toBe(3));
+    expect((await db.weights.toArray()).map((entry) => entry.kittenId).sort()).toEqual([
+      'k1',
+      'k2',
+      'k3',
+    ]);
+
+    firstRender.unmount();
+    renderScreen();
+    await waitFor(() =>
+      expect(screen.getByLabelText('Gewicht von Rot in Gramm')).toHaveAttribute('placeholder', '95'),
+    );
+    expect(screen.getByLabelText('Gewicht von Blau in Gramm')).toHaveAttribute(
+      'placeholder',
+      '101',
+    );
+    expect(screen.getByLabelText('Gewicht von Grün in Gramm')).toHaveAttribute(
+      'placeholder',
+      '98',
+    );
+  });
+
+  it('trägt einen alten Wurf durchgängig nach und springt ohne weitere Klicks zum Abend', async () => {
+    const user = userEvent.setup();
+    const birthDate = addDays(todayISO(), -1);
+    await db.litters.update('l1', { birthDate });
+    renderScreen();
+
+    await user.click(await screen.findByRole('button', { name: 'Fehlende nachtragen' }));
+    expect(document.activeElement?.id).toBe('weigh-k1');
+    await user.keyboard('95{Enter}101{Enter}98{Enter}');
+
+    await waitFor(async () => {
+      expect(await db.weights.count()).toBe(3);
+      expect(document.activeElement?.id).toBe('weigh-k1');
+    });
+    const morning = await db.weights.toArray();
+    expect(morning.every((entry) => new Date(entry.at).getHours() === 8)).toBe(true);
+
+    // Der zweite Durchgang startet automatisch am Abend desselben Tages.
+    await user.keyboard('99{Enter}105{Enter}102{Enter}');
+    await waitFor(async () => expect(await db.weights.count()).toBe(6));
+    const evening = (await db.weights.toArray()).filter(
+      (entry) => new Date(entry.at).getHours() === 20,
+    );
+    expect(evening).toHaveLength(3);
+  });
+
   it('zeigt den letzten Wert nur als Platzhalter und speichert ihn nicht mit', async () => {
     await db.weights.put({ id: 'w1', kittenId: 'k1', at: '2026-03-05T07:00:00.000Z', grams: 128 });
     const user = userEvent.setup();

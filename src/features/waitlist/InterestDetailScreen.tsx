@@ -39,7 +39,6 @@ import {
   CONTACT_CHANNEL_LABEL,
   INTEREST_STATUS_LABEL,
   KITTEN_SALE_STATUS_LABEL,
-  WISH_SEX_LABEL,
   collarColor,
   kittenLabel,
   type ContactChannel,
@@ -65,13 +64,14 @@ import {
   deleteContactNote,
   selectableKittens,
   setInterestStatus,
-  setReservedKitten,
+  toggleReservedKitten,
   updateContactNote,
   updateInterest,
 } from './store';
 import { CHANNEL_ICON, CHANNEL_ORDER, STATUS_CHAIN, openExternal } from './constants';
 import { Chip, ChipRow, DataRow, LoadingList } from './shared';
 import { InterestSheet } from './InterestSheet';
+import { interestKittenIds, interestWishSummary } from './model';
 
 /* ================================================================== */
 /*  Schnellaktionen                                                    */
@@ -389,35 +389,37 @@ function KittenLinkSheet({
 }) {
   const toast = useToast();
   const [kittens, setKittens] = useState<Kitten[] | undefined>(undefined);
+  const selectedIds = useMemo(() => interestKittenIds(interest), [interest]);
 
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    void selectableKittens(interest.kittenId).then((list) => {
+    void selectableKittens(selectedIds).then((list) => {
       if (!cancelled) setKittens(list);
     });
     return () => {
       cancelled = true;
     };
-  }, [open, interest.kittenId]);
+  }, [open, selectedIds]);
 
-  async function choose(kittenId?: ID) {
+  async function choose(kittenId: ID) {
     try {
-      await setReservedKitten(interest, kittenId);
+      await toggleReservedKitten(interest, kittenId);
     } catch {
       toast.error('Die Verknüpfung ließ sich nicht speichern.');
       return;
     }
-    toast.success(kittenId ? 'Kitten verknüpft' : 'Verknüpfung gelöst');
-    onClose();
+    toast.success(selectedIds.includes(kittenId) ? 'Verknüpfung gelöst' : 'Kitten verknüpft');
   }
 
   return (
-    <Sheet open={open} onClose={onClose} title="Kitten verknüpfen">
+    <Sheet open={open} onClose={onClose} title="Kitten zuordnen">
       <Stack gap="md">
         <Callout tone="neutral" icon="info">
-          Mit der Verknüpfung wird das Kitten auf „{KITTEN_SALE_STATUS_LABEL.reserved}" gesetzt. Der
-          Schritt ist freiwillig — eine Reservierung geht auch ohne.
+          Du kannst mehrere Kitten auswählen. Beim Interessentenstatus „
+          {INTEREST_STATUS_LABEL.reserved}" werden alle ausgewählten Kitten auf „
+          {KITTEN_SALE_STATUS_LABEL.reserved}" geführt. Noch nicht ausgewählte Wünsche bleiben
+          einfach offen.
         </Callout>
 
         {kittens === undefined ? (
@@ -442,18 +444,16 @@ function KittenLinkSheet({
                 }
                 title={kittenLabel(k)}
                 subtitle={KITTEN_SALE_STATUS_LABEL[k.saleStatus]}
-                trailing={k.id === interest.kittenId ? 'verknüpft' : undefined}
+                trailing={selectedIds.includes(k.id) ? '✓ zugeordnet' : undefined}
                 onClick={() => void choose(k.id)}
               />
             ))}
           </List>
         )}
 
-        {interest.kittenId && (
-          <Button variant="quiet" block icon="x" onClick={() => void choose(undefined)}>
-            Verknüpfung lösen
-          </Button>
-        )}
+        <Button variant="primary" block icon="check" onClick={onClose}>
+          Fertig
+        </Button>
       </Stack>
     </Sheet>
   );
@@ -489,9 +489,16 @@ export function InterestDetailScreen() {
         : [],
     [interestId],
   );
-  const kitten = useLiveQuery(
-    async () => (interest?.kittenId ? ((await db.kittens.get(interest.kittenId)) ?? null) : null),
-    [interest?.kittenId],
+  const assignedKittenKey = interest ? interestKittenIds(interest).join('|') : '';
+  const kittens = useLiveQuery(
+    async () => {
+      if (!interest) return [];
+      const ids = interestKittenIds(interest);
+      return (await Promise.all(ids.map((id) => db.kittens.get(id)))).filter(
+        (kitten): kitten is Kitten => Boolean(kitten),
+      );
+    },
+    [interest?.id, assignedKittenKey],
   );
 
   const [editOpen, setEditOpen] = useState(false);
@@ -576,7 +583,7 @@ export function InterestDetailScreen() {
       toast.error('Der Status ließ sich nicht ändern.');
       return;
     }
-    if (next === 'reserved' && !interest.kittenId) setKittenOpen(true);
+    if (next === 'reserved' && interestKittenIds(interest).length === 0) setKittenOpen(true);
   }
 
   /** Liefert zurück, ob das Speichern geklappt hat — Blätter schließen nur dann. */
@@ -598,7 +605,7 @@ export function InterestDetailScreen() {
   return (
     <Screen
       title={interest.name}
-      subtitle={`${INTEREST_STATUS_LABEL[interest.status]} · Wunsch: ${WISH_SEX_LABEL[interest.wishSex]}`}
+      subtitle={`${INTEREST_STATUS_LABEL[interest.status]} · ${interestWishSummary(interest)}`}
       back
       actions={
         <IconButton icon="edit" label="Stammdaten bearbeiten" onClick={() => setEditOpen(true)} />
@@ -724,7 +731,7 @@ export function InterestDetailScreen() {
               <DataRow label="E-Mail" value={interest.email} />
               <DataRow label="Ort" value={interest.city} />
               <DataRow label="Quelle" value={interest.source} />
-              <DataRow label="Wunschgeschlecht" value={WISH_SEX_LABEL[interest.wishSex]} />
+              <DataRow label="Kittenwünsche" value={interestWishSummary(interest)} />
               <DataRow label="Wunschzeitraum" value={interest.wishTimeframe} />
             </div>
           </Card>
@@ -804,30 +811,33 @@ export function InterestDetailScreen() {
           title="Kitten"
           action={
             <Button size="sm" variant="ghost" icon="paw" onClick={() => setKittenOpen(true)}>
-              {interest.kittenId ? 'Ändern' : 'Verknüpfen'}
+              {interestKittenIds(interest).length > 0 ? 'Ändern' : 'Zuordnen'}
             </Button>
           }
         >
-          {kitten ? (
+          {kittens && kittens.length > 0 ? (
             <List>
-              <ListRow
-                leading={
-                  <span
-                    aria-hidden="true"
-                    className="inline-block size-3.5 rounded-full"
-                    style={{ background: collarColor(kitten.collarColor).hex }}
-                  />
-                }
-                title={kittenLabel(kitten)}
-                subtitle={KITTEN_SALE_STATUS_LABEL[kitten.saleStatus]}
-                onClick={() => navigate(`/zucht/kitten/${kitten.id}`)}
-              />
+              {kittens.map((kitten) => (
+                <ListRow
+                  key={kitten.id}
+                  leading={
+                    <span
+                      aria-hidden="true"
+                      className="inline-block size-3.5 rounded-full"
+                      style={{ background: collarColor(kitten.collarColor).hex }}
+                    />
+                  }
+                  title={kittenLabel(kitten)}
+                  subtitle={`${kitten.sex === 'male' ? 'Kater' : kitten.sex === 'female' ? 'Katze' : 'Geschlecht offen'} · ${KITTEN_SALE_STATUS_LABEL[kitten.saleStatus]}`}
+                  onClick={() => navigate(`/zucht/kitten/${kitten.id}`)}
+                />
+              ))}
             </List>
           ) : (
             <Card>
               <p className="text-[0.9rem] leading-relaxed text-text-dim">
-                Noch kein Kitten verknüpft. Beim Reservieren lässt sich eines zuordnen — dann wird
-                auch dessen Verkaufsstatus mitgeführt.
+                Noch kein Kitten zugeordnet. Beim Reservieren lassen sich ein oder mehrere Kitten
+                auswählen — deren Verkaufsstatus wird dann gemeinsam mitgeführt.
               </p>
             </Card>
           )}

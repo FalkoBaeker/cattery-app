@@ -90,6 +90,7 @@ async function fillDatabase(): Promise<void> {
     sex: 'female',
     stillborn: false,
     saleStatus: 'available',
+    interestId: 'int-1',
     birthWeightG: 94,
     ...STAMP,
   });
@@ -114,8 +115,11 @@ async function fillDatabase(): Promise<void> {
     id: 'int-1',
     name: 'Familie Sonnenschein',
     wishSex: 'any',
+    wishSexes: ['male', 'female', 'male'],
     status: 'new',
     sortIndex: 0,
+    kittenId: 'kit-1',
+    kittenIds: ['kit-1'],
     ...STAMP,
   });
   await db.interestNotes.put({

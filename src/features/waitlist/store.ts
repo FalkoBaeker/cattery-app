@@ -28,6 +28,11 @@ import {
   type BroadcastRun,
   type SortUpdate,
 } from './order';
+import {
+  interestKittenIds,
+  kittenAssignmentPatch,
+  wishSexPatch,
+} from './model';
 
 /* ================================================================== */
 /*  Interessenten                                                      */
@@ -40,6 +45,7 @@ export interface NewInterestInput {
   city?: string;
   source?: string;
   wishSex?: WishSex;
+  wishSexes?: WishSex[];
   wishTimeframe?: string;
 }
 
@@ -47,13 +53,14 @@ export interface NewInterestInput {
 export async function createInterest(input: NewInterestInput): Promise<Interest> {
   const all = await db.interests.toArray();
   const active = all.filter((i) => !i.deletedAt);
+  const wishes = wishSexPatch(input.wishSexes ?? [input.wishSex ?? 'any']);
   return insert(db.interests, {
     name: input.name.trim(),
     phone: input.phone?.trim() || undefined,
     email: input.email?.trim() || undefined,
     city: input.city?.trim() || undefined,
     source: input.source?.trim() || 'Homepage',
-    wishSex: input.wishSex ?? 'any',
+    ...wishes,
     wishTimeframe: input.wishTimeframe?.trim() || undefined,
     status: 'new',
     sortIndex: nextSortIndex(active),
@@ -102,7 +109,7 @@ export function saleStatusFor(
   return current;
 }
 
-/** Löst die Verknüpfung und gibt das Kitten wieder frei. */
+/** Löst die Verknüpfung auf der Kitten-Seite und gibt es gegebenenfalls frei. */
 async function releaseKitten(kittenId: ID, interestId: ID): Promise<void> {
   const kitten = await db.kittens.get(kittenId);
   if (!kitten || kitten.interestId !== interestId) return;
@@ -113,9 +120,19 @@ async function releaseKitten(kittenId: ID, interestId: ID): Promise<void> {
   await patch(db.kittens, kittenId, { interestId: undefined, saleStatus: freed });
 }
 
+async function allAssignedKittenIds(interest: Interest): Promise<ID[]> {
+  const reverse = await db.kittens.where('interestId').equals(interest.id).primaryKeys();
+  return [...new Set([...interestKittenIds(interest), ...reverse])];
+}
+
+async function removeKittenFromInterest(interest: Interest, kittenId: ID): Promise<void> {
+  const remaining = interestKittenIds(interest).filter((id) => id !== kittenId);
+  await patch(db.interests, interest.id, kittenAssignmentPatch(remaining));
+}
+
 /**
- * Verknüpft ein Kitten mit dem Interessenten (oder löst die Verknüpfung,
- * wenn `kittenId` fehlt) und führt den Verkaufsstatus mit.
+ * Fügt dem Interessenten ein Kitten hinzu. Fehlt `kittenId`, werden alle
+ * Verknüpfungen gelöst. Mehrere Kitten desselben Haushalts bleiben erhalten.
  */
 export async function setReservedKitten(interest: Interest, kittenId?: ID): Promise<void> {
   await db.transaction('rw', db.interests, db.kittens, async () => {
@@ -127,28 +144,49 @@ export async function setReservedKitten(interest: Interest, kittenId?: ID): Prom
     const kitten = kittenId ? await db.kittens.get(kittenId) : undefined;
     if (kittenId && !kitten) return;
 
-    if (current.kittenId && current.kittenId !== kittenId) {
-      await releaseKitten(current.kittenId, current.id);
-    }
     if (!kitten) {
-      await patch(db.interests, current.id, { kittenId: undefined });
+      const assigned = await allAssignedKittenIds(current);
+      for (const id of assigned) await releaseKitten(id, current.id);
+      await patch(db.interests, current.id, kittenAssignmentPatch([]));
       return;
     }
 
     // Ein Kitten kann nie zwei Interessenten gleichzeitig gehören.
     if (kitten.interestId && kitten.interestId !== current.id) {
       const previousOwner = await db.interests.get(kitten.interestId);
-      if (previousOwner?.kittenId === kitten.id) {
-        await patch(db.interests, previousOwner.id, { kittenId: undefined });
-      }
+      if (previousOwner) await removeKittenFromInterest(previousOwner, kitten.id);
     }
 
-    await patch(db.interests, current.id, { kittenId: kitten.id });
+    await patch(
+      db.interests,
+      current.id,
+      kittenAssignmentPatch([...interestKittenIds(current), kitten.id]),
+    );
     await patch(db.kittens, kitten.id, {
       interestId: current.id,
       saleStatus: saleStatusFor(current.status, kitten.saleStatus),
     });
   });
+}
+
+/** Löst genau eine Zuordnung; andere Kitten des Haushalts bleiben reserviert. */
+export async function removeReservedKitten(interest: Interest, kittenId: ID): Promise<void> {
+  await db.transaction('rw', db.interests, db.kittens, async () => {
+    const current = await db.interests.get(interest.id);
+    if (!current) return;
+    await releaseKitten(kittenId, current.id);
+    await removeKittenFromInterest(current, kittenId);
+  });
+}
+
+export async function toggleReservedKitten(interest: Interest, kittenId: ID): Promise<void> {
+  const current = await db.interests.get(interest.id);
+  if (!current) return;
+  if (interestKittenIds(current).includes(kittenId)) {
+    await removeReservedKitten(current, kittenId);
+  } else {
+    await setReservedKitten(current, kittenId);
+  }
 }
 
 /**
@@ -179,17 +217,20 @@ export async function setInterestStatus(
     }
     await patch(db.interests, current.id, changes);
 
-    if (!current.kittenId) return;
+    const assigned = await allAssignedKittenIds(current);
+    if (assigned.length === 0) return;
     if (status === 'declined') {
-      await releaseKitten(current.kittenId, current.id);
-      await patch(db.interests, current.id, { kittenId: undefined });
+      for (const kittenId of assigned) await releaseKitten(kittenId, current.id);
+      await patch(db.interests, current.id, kittenAssignmentPatch([]));
       return;
     }
-    const kitten = await db.kittens.get(current.kittenId);
-    if (!kitten) return;
-    const next = saleStatusFor(status, kitten.saleStatus);
-    if (next !== kitten.saleStatus) {
-      await patch(db.kittens, kitten.id, { saleStatus: next });
+    for (const kittenId of assigned) {
+      const kitten = await db.kittens.get(kittenId);
+      if (!kitten || kitten.interestId !== current.id) continue;
+      const next = saleStatusFor(status, kitten.saleStatus);
+      if (next !== kitten.saleStatus) {
+        await patch(db.kittens, kitten.id, { saleStatus: next });
+      }
     }
   });
 }
@@ -242,7 +283,9 @@ export async function purgeInterest(id: ID): Promise<void> {
       const linkedKittenIds = new Set(
         (await db.kittens.where('interestId').equals(id).toArray()).map((kitten) => kitten.id),
       );
-      if (interest?.kittenId) linkedKittenIds.add(interest.kittenId);
+      if (interest) {
+        for (const kittenId of interestKittenIds(interest)) linkedKittenIds.add(kittenId);
+      }
       for (const kittenId of linkedKittenIds) {
         await releaseKitten(kittenId, id);
       }
@@ -358,14 +401,15 @@ export async function clearBroadcastRun(): Promise<void> {
 /*  Lesehilfen                                                         */
 /* ================================================================== */
 
-/** Kitten, die sich verknüpfen lassen: freie plus das bereits verknüpfte. */
-export async function selectableKittens(currentKittenId?: ID): Promise<Kitten[]> {
+/** Kitten, die sich verknüpfen lassen: freie plus alle bereits verknüpften. */
+export async function selectableKittens(currentKittenIds: ID[] = []): Promise<Kitten[]> {
   const all = await db.kittens.toArray();
+  const selected = new Set(currentKittenIds);
   return all.filter(
     (k) =>
       !k.stillborn &&
       !k.diedAt &&
       k.saleStatus !== 'deceased' &&
-      (k.id === currentKittenId || k.saleStatus === 'available'),
+      (selected.has(k.id) || k.saleStatus === 'available'),
   );
 }

@@ -3,7 +3,7 @@
  * App offline und leichtgewichtig bleibt.
  *
  *  - x = Alter in Tagen, y = Gramm
- *  - Tagesmittel als Linie, Einzelmessungen als Punkte
+ *  - echte Messungen als Linie und Punkte, Tagesmittel als größere Knoten
  *  - das betrachtete Kitten kräftig, die Geschwister blass dahinter
  *  - Achsen über semantische Farben, damit hell und dunkel beide stimmen
  *  - eine einzige Messung ergibt einen Punkt, keine Linie

@@ -237,7 +237,7 @@ describe('linkInterest', () => {
     expect((await db.interests.get(b.id))?.kittenId).toBe(kitten.id);
   });
 
-  it('löst auch die bisherige Kitten-Verbindung des neuen Interessenten', async () => {
+  it('behält weitere Kitten desselben Interessenten verknüpft', async () => {
     const litter = await makeLitter();
     const erstes = await addKitten({ litterId: litter.id, collarColor: 'red' }, settings);
     const zweites = await addKitten({ litterId: litter.id, collarColor: 'blue' }, settings);
@@ -252,10 +252,10 @@ describe('linkInterest', () => {
     await db.kittens.update(erstes.id, { saleStatus: 'reserved' });
     await linkInterest(zweites, interest.id);
 
-    expect((await db.kittens.get(erstes.id))?.interestId).toBeUndefined();
-    expect((await db.kittens.get(erstes.id))?.saleStatus).toBe('available');
+    expect((await db.kittens.get(erstes.id))?.interestId).toBe(interest.id);
+    expect((await db.kittens.get(erstes.id))?.saleStatus).toBe('reserved');
     expect((await db.kittens.get(zweites.id))?.interestId).toBe(interest.id);
-    expect((await db.interests.get(interest.id))?.kittenId).toBe(zweites.id);
+    expect((await db.interests.get(interest.id))?.kittenIds).toEqual([erstes.id, zweites.id]);
   });
 
   it('behält die vorhandene Verbindung bei einer unbekannten Zielkennung', async () => {
@@ -272,6 +272,23 @@ describe('linkInterest', () => {
     await linkInterest((await db.kittens.get(kitten.id))!, 'nicht-mehr-da');
 
     expect((await db.kittens.get(kitten.id))?.interestId).toBe(interest.id);
+    expect((await db.interests.get(interest.id))?.kittenId).toBe(kitten.id);
+  });
+
+  it('repariert bei Altständen die fehlende Gegenrichtung', async () => {
+    const litter = await makeLitter();
+    const interest = await insert(db.interests, {
+      name: 'Familie A',
+      wishSex: 'any',
+      status: 'new',
+      sortIndex: 0,
+    });
+    const kitten = await addKitten({ litterId: litter.id, collarColor: 'red' }, settings);
+    await db.kittens.update(kitten.id, { interestId: interest.id });
+
+    await linkInterest((await db.kittens.get(kitten.id))!, interest.id);
+
+    expect((await db.interests.get(interest.id))?.kittenIds).toEqual([kitten.id]);
     expect((await db.interests.get(interest.id))?.kittenId).toBe(kitten.id);
   });
 });

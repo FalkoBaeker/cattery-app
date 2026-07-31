@@ -12,7 +12,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { ConfirmProvider, ToastProvider } from '../../ui';
 import { db, wipeDatabase } from '../../db/db';
 import { InterestDetailScreen } from './InterestDetailScreen';
-import { createInterest } from './store';
+import { createInterest, setInterestStatus } from './store';
 
 function renderScreen(id: string) {
   return render(
@@ -128,5 +128,53 @@ describe('InterestDetailScreen', () => {
     expect(screen.getByText(/Platz für alles, was sonst nirgends hinpasst/)).toBeInTheDocument();
     expect(screen.queryByText(/Bewertung/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Sterne/i)).not.toBeInTheDocument();
+  });
+
+  it('zeigt mehrere Wünsche und ordnet mehrere Kitten demselben Haushalt zu', async () => {
+    const user = userEvent.setup();
+    const created = await createInterest({
+      name: 'Familie Mehr',
+      wishSexes: ['male', 'female', 'male'],
+    });
+    await setInterestStatus(created, 'reserved');
+    const stamp = {
+      createdAt: '2026-03-03T08:00:00.000Z',
+      updatedAt: '2026-03-03T08:00:00.000Z',
+    };
+    await db.kittens.bulkPut([
+      {
+        id: 'k1',
+        litterId: 'l1',
+        collarColor: 'red',
+        sex: 'male',
+        stillborn: false,
+        saleStatus: 'available',
+        ...stamp,
+      },
+      {
+        id: 'k2',
+        litterId: 'l1',
+        collarColor: 'blue',
+        sex: 'female',
+        stillborn: false,
+        saleStatus: 'available',
+        ...stamp,
+      },
+    ]);
+
+    renderScreen(created.id);
+    expect((await screen.findAllByText(/3 Kitten: 2 Kater, 1 Katze/)).length).toBeGreaterThan(0);
+    await user.click(screen.getByRole('button', { name: 'Zuordnen' }));
+    await user.click(await screen.findByText('Rot'));
+    await user.click(await screen.findByText('Blau'));
+
+    await waitFor(async () => {
+      expect((await db.interests.get(created.id))?.kittenIds).toEqual(['k1', 'k2']);
+      expect((await db.kittens.get('k1'))?.interestId).toBe(created.id);
+      expect((await db.kittens.get('k2'))?.interestId).toBe(created.id);
+    });
+    await user.click(screen.getByRole('button', { name: 'Fertig' }));
+    expect(await screen.findByText('Kater · Vorgemerkt')).toBeInTheDocument();
+    expect(await screen.findByText('Katze · Vorgemerkt')).toBeInTheDocument();
   });
 });

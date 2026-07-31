@@ -38,6 +38,7 @@ import {
   formatTime,
   fromLocalInputValue,
   nowISO,
+  todayISO,
   toLocalInputValue,
 } from '../../lib/date';
 import { formatGainG, formatGainPerDay, formatGrams, formatPercent } from '../../lib/format';
@@ -48,13 +49,16 @@ import {
 } from '../../domain/weight';
 import {
   analyzeKitten,
+  completedBackfillIds,
   dayOfLifeLabel,
   dayProgress,
   deltaToPrevious,
   latestDelta,
   measurementsOn,
+  nextMissingBackfillAt,
   nextFocusId,
   parseGrams,
+  suggestedBackfillAt,
 } from './weighing';
 import type { WeightSample } from './chart';
 import { addWeight, deleteWeight } from './store';
@@ -148,6 +152,9 @@ export function WeighScreen() {
    */
   const roundRef = useRef<Set<ID>>(new Set());
   const [lastSaved, setLastSaved] = useState<Record<ID, { entryId: ID; grams: number }>>({});
+  const [pendingIds, setPendingIds] = useState<Set<ID>>(new Set());
+  const pendingRef = useRef<Set<ID>>(new Set());
+  const roundPromisesRef = useRef<Map<ID, Promise<boolean>>>(new Map());
   const [focusedId, setFocusedId] = useState<ID | null>(null);
   const [detailId, setDetailId] = useState<ID | null>(null);
   const [editEntryId, setEditEntryId] = useState<ID | null>(null);
@@ -159,9 +166,12 @@ export function WeighScreen() {
 
   // Wechselt der erfasste Tag, beginnt der Durchgang von vorn.
   useEffect(() => {
+    // Nachtragswechsel werden durch `beginBackfill` gesetzt, inklusive der
+    // auf diesem Morgen/Abend schon vorhandenen Kitten.
+    if (atOverride) return;
     roundRef.current = new Set();
     setLastSaved({});
-  }, [refDate]);
+  }, [refDate, atOverride]);
 
   /* --- Aufbereitete Daten ---------------------------------------- */
 
@@ -234,27 +244,63 @@ export function WeighScreen() {
     setDrafts(draftsRef.current);
   }
 
-  async function persist(kitten: Kitten, grams: number, at: ISODateTime, allDone: boolean) {
+  function setPending(kittenId: ID, pending: boolean) {
+    const next = new Set(pendingRef.current);
+    if (pending) next.add(kittenId);
+    else next.delete(kittenId);
+    pendingRef.current = next;
+    setPendingIds(next);
+  }
+
+  function beginBackfill(at: ISODateTime) {
+    if (!view) return;
+    const done = new Set(
+      completedBackfillIds(view.order, view.samplesByKitten, at, view.litter.birthDate),
+    );
+    roundRef.current = done;
+    roundPromisesRef.current.clear();
+    setLastSaved({});
+    setAtOverride(at);
+
+    // Der Button-Klick ist noch die iOS-Nutzergeste: jetzt fokussieren, damit
+    // die Zahlentastatur ohne einen weiteren Tap aufgeht.
+    const first = nextFocusId(view.order, null, done);
+    if (first) {
+      inputElement(first)?.focus();
+      // Beim automatischen Wechsel ist der bisherige Durchgang im aktuellen
+      // DOM noch als erledigt/gesperrt markiert. Nach dem Rendern erneut
+      // fokussieren, ohne dass die bereits offene Zahlentastatur zugeht.
+      window.setTimeout(() => inputElement(first)?.focus(), 0);
+    }
+  }
+
+  async function persist(kitten: Kitten, grams: number, at: ISODateTime): Promise<boolean> {
     try {
       // Frisch aus der Datenbank lesen, damit der Vergleich auch bei zwei
       // schnellen Eingaben hintereinander stimmt.
       const before = await db.weights.where('kittenId').equals(kitten.id).toArray();
       const entry = await addWeight(kitten.id, grams, at);
+      setDraft(kitten.id, null);
       setLastSaved((s) => ({ ...s, [kitten.id]: { entryId: entry.id, grams } }));
 
       const delta = deltaToPrevious(before, at, grams);
       const parts = [`${kittenLabel(kitten)}: ${formatGrams(grams)}`];
       if (delta) parts.push(formatGainG(delta.grams));
-      if (allDone) parts.push('Durchgang vollständig');
-
       toast.show(parts.join(' · '), {
         tone: 'ok',
         icon: 'check-circle',
         durationMs: 4500,
         action: { label: 'Rückgängig', onClick: () => void undo(kitten.id, entry.id) },
       });
+      return true;
     } catch {
+      // Die Zahl bleibt im Feld stehen. So geht eine fehlgeschlagene
+      // IndexedDB-Schreiboperation nicht als vermeintlich erledigt unter.
+      roundRef.current.delete(kitten.id);
       toast.error('Das Gewicht konnte nicht gespeichert werden.');
+      return false;
+    } finally {
+      setPending(kitten.id, false);
     }
   }
 
@@ -279,6 +325,7 @@ export function WeighScreen() {
    * Tastatur auf dem iPhone offen.
    */
   function commit(kitten: Kitten) {
+    if (pendingRef.current.has(kitten.id)) return;
     const raw = draftsRef.current[kitten.id];
     if (raw == null) return;
 
@@ -289,8 +336,11 @@ export function WeighScreen() {
     }
 
     const at = atOverride ?? nowISO();
-    setDraft(kitten.id, null);
     roundRef.current.add(kitten.id);
+    setPending(kitten.id, true);
+
+    const savePromise = persist(kitten, parsed.grams, at);
+    roundPromisesRef.current.set(kitten.id, savePromise);
 
     const order = view?.order ?? [];
     const next = nextFocusId(order, kitten.id, roundRef.current);
@@ -302,11 +352,36 @@ export function WeighScreen() {
     } else {
       // Der Durchgang ist voll. Die nächste Eingabe beginnt einen neuen —
       // zweimal täglich wiegen ist in Woche 1–2 der Normalfall.
-      inputElement(kitten.id)?.blur();
-      roundRef.current = new Set();
-    }
+      if (!atOverride) inputElement(kitten.id)?.blur();
+      const roundPromises = [...roundPromisesRef.current.values()];
+      void Promise.all(roundPromises).then((saved) => {
+        roundPromisesRef.current.clear();
+        if (!saved.every(Boolean)) return;
 
-    void persist(kitten, parsed.grams, at, next === null);
+        roundRef.current = new Set();
+        toast.success('Durchgang vollständig gespeichert');
+
+        if (!atOverride || at !== atOverride) return;
+        const nextAt = view
+          ? nextMissingBackfillAt(
+              at,
+              view.order,
+              view.samplesByKitten,
+              view.litter.birthDate,
+              nowISO(),
+            )
+          : null;
+        if (nextAt) {
+          beginBackfill(nextAt);
+        } else {
+          setAtOverride(null);
+          toast.show('Alle fehlenden Durchgänge bis heute sind nachgetragen.', {
+            tone: 'ok',
+            icon: 'check-circle',
+          });
+        }
+      });
+    }
   }
 
   /* --- Lade- und Leerzustände -------------------------------------- */
@@ -362,6 +437,11 @@ export function WeighScreen() {
   const progressLabel = hasMultipleDailyMeasurements
     ? `Wiege-Fortschritt: ${progress.creditedMeasurements} von ${progress.requiredMeasurements} Messungen`
     : `Wiege-Fortschritt: ${progress.done} von ${progress.total} gewogen`;
+  const completedInBackfill = new Set(
+    atOverride
+      ? completedBackfillIds(view.order, view.samplesByKitten, atOverride, birthDate)
+      : [],
+  );
 
   /* --- Bildschirm ohne Kitten -------------------------------------- */
 
@@ -439,32 +519,75 @@ export function WeighScreen() {
             />
           </div>
 
-          <Button
-            className="mt-3"
-            block
-            variant="quiet"
-            icon="clock"
-            onClick={() => {
-              setTimeDraft(toLocalInputValue(atOverride ?? nowISO()));
-              setTimeOpen(true);
-            }}
-          >
-            {atOverride ? `Nachtrag: ${formatDateTime(atOverride)}` : 'Zeitpunkt: jetzt'}
-          </Button>
+          {atOverride ? (
+            <Button
+              className="mt-3"
+              block
+              variant="quiet"
+              icon="clock"
+              onClick={() => {
+                setTimeDraft(toLocalInputValue(atOverride));
+                setTimeOpen(true);
+              }}
+            >
+              Nachtrag: {formatDateTime(atOverride)}
+            </Button>
+          ) : (
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <div className="flex min-h-11 items-center justify-center gap-1.5 rounded-[var(--radius-field)] bg-ok-soft px-2 text-[0.85rem] font-medium text-ok">
+                <Icon name="check" size={16} />
+                Zeitpunkt: jetzt
+              </div>
+              <Button
+                variant="quiet"
+                icon="clock"
+                onClick={() =>
+                  beginBackfill(
+                    suggestedBackfillAt(
+                      view.order,
+                      view.samplesByKitten,
+                      birthDate,
+                      todayISO(),
+                    ),
+                  )
+                }
+              >
+                Fehlende nachtragen
+              </Button>
+            </div>
+          )}
         </Card>
 
         {atOverride && (
           <Callout tone="warn" icon="clock" title="Werte werden nachgetragen">
-            <p>Alle Eingaben werden auf {formatDateTime(atOverride)} gespeichert.</p>
-            <Button
-              className="mt-1"
-              variant="ghost"
-              size="md"
-              icon="refresh"
-              onClick={() => setAtOverride(null)}
-            >
-              Wieder auf jetzt stellen
-            </Button>
+            <p>
+              Alle Eingaben werden auf {formatDateTime(atOverride)} gespeichert. Nach dem letzten
+              Kitten springt die App automatisch zum nächsten fehlenden Durchgang.
+            </p>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <Button
+                variant="ghost"
+                size="md"
+                icon="edit"
+                onClick={() => {
+                  setTimeDraft(toLocalInputValue(atOverride));
+                  setTimeOpen(true);
+                }}
+              >
+                Zeitpunkt ändern
+              </Button>
+              <Button
+                variant="ghost"
+                size="md"
+                icon="x"
+                onClick={() => {
+                  roundRef.current = new Set();
+                  setAtOverride(null);
+                }}
+              >
+                Nachtragen beenden
+              </Button>
+            </div>
           </Callout>
         )}
 
@@ -479,13 +602,19 @@ export function WeighScreen() {
         <List>
           {alive.map((k) => (
             <WeighRow
-              key={k.id}
+              // Beim automatischen Wechsel des Nachtragsdurchgangs neu
+              // einhängen: NumberInput hält den gerade getippten Rohtext
+              // intern. Ohne neuen Schlüssel stünde das alte Gewicht im
+              // Feld des nächsten Abends noch sichtbar herum.
+              key={`${k.id}:${atOverride ?? 'now'}`}
               kitten={k}
               entries={view.samplesByKitten.get(k.id) ?? []}
               refDate={refDate}
               level={view.analyses.get(k.id)?.level ?? 'unknown'}
               draft={drafts[k.id] ?? null}
               lastSaved={lastSaved[k.id]}
+              pending={pendingIds.has(k.id)}
+              backfillComplete={completedInBackfill.has(k.id)}
               onDraftChange={(v) => setDraft(k.id, v)}
               onCommit={() => commit(k)}
               onFocus={() => setFocusedId(k.id)}
@@ -547,7 +676,7 @@ export function WeighScreen() {
                   toast.error('Bitte einen Zeitpunkt auswählen.');
                   return;
                 }
-                setAtOverride(fromLocalInputValue(timeDraft));
+                beginBackfill(fromLocalInputValue(timeDraft));
                 setTimeOpen(false);
               }}
             >
@@ -558,6 +687,7 @@ export function WeighScreen() {
               size="md"
               block
               onClick={() => {
+                roundRef.current = new Set();
                 setAtOverride(null);
                 setTimeOpen(false);
               }}
@@ -630,6 +760,8 @@ interface WeighRowProps {
   level: WeightLevel;
   draft: number | null;
   lastSaved?: { entryId: ID; grams: number };
+  pending: boolean;
+  backfillComplete: boolean;
   onDraftChange: (v: number | null) => void;
   onCommit: () => void;
   onFocus: () => void;
@@ -646,6 +778,8 @@ function WeighRow({
   level,
   draft,
   lastSaved,
+  pending,
+  backfillComplete,
   onDraftChange,
   onCommit,
   onFocus,
@@ -704,6 +838,16 @@ function WeighRow({
                   {todayCount === 1 ? 'erfasst' : `${todayCount}× erfasst`}
                 </Badge>
               )}
+              {backfillComplete && (
+                <Badge tone="neutral" icon="check">
+                  dieser Durchgang vorhanden
+                </Badge>
+              )}
+              {pending && (
+                <Badge tone="neutral" icon="clock">
+                  wird gespeichert …
+                </Badge>
+              )}
             </span>
           </span>
           <Icon name="chevron-right" size={16} className="shrink-0 text-text-faint" />
@@ -719,6 +863,7 @@ function WeighRow({
             enterKeyHint="next"
             autoComplete="off"
             placeholder={last ? String(last.grams) : '—'}
+            disabled={pending || (backfillComplete && draft == null)}
             aria-label={`Gewicht von ${label} in Gramm`}
             className="h-13 text-right text-[1.3rem] font-semibold"
             onFocus={(e) => {
@@ -741,8 +886,15 @@ function WeighRow({
       </div>
 
       {draft != null && (
-        <Button variant="primary" size="md" block icon="check" onClick={onCommit}>
-          Speichern und weiter
+        <Button
+          variant="primary"
+          size="md"
+          block
+          icon="check"
+          loading={pending}
+          onClick={onCommit}
+        >
+          {pending ? 'Wird gespeichert' : 'Speichern und weiter'}
         </Button>
       )}
 

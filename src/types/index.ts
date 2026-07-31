@@ -359,6 +359,12 @@ export interface Interest extends Timestamped {
   /** Woher kam die Anfrage (F79: meist eigene Homepage). */
   source?: string;
   wishSex: WishSex;
+  /**
+   * Ein einzelner Haushalt kann mehrere Kitten suchen. Die Reihenfolge bleibt
+   * erhalten, damit auch „Kater, Katze, Kater" exakt abgebildet wird.
+   * Fehlt das Feld in einem Altbestand, gilt `wishSex` als einziger Wunsch.
+   */
+  wishSexes?: WishSex[];
   wishTimeframe?: string;
   /** Fragebogen (F69/F77). */
   allergySufferer?: boolean;
@@ -371,7 +377,12 @@ export interface Interest extends Timestamped {
   status: InterestStatus;
   /** Reihenfolge in der Warteliste; kleiner = weiter oben. */
   sortIndex: number;
-  /** Verknüpftes Kitten, sobald reserviert. */
+  /**
+   * Verknüpfte Kitten, sobald reserviert. Fehlt das Feld in einem Altbestand,
+   * gilt `kittenId` als einzige Zuordnung.
+   */
+  kittenIds?: ID[];
+  /** Erste Zuordnung für abwärtskompatible Sicherungen und alte App-Stände. */
   kittenId?: ID;
   notes?: string;
   /** Papierkorb: gesetzt = ausgeblendet, wird nach 30 Tagen endgültig gelöscht. */

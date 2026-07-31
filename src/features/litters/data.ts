@@ -9,6 +9,7 @@
 import { db, insert, insertPlain, patch } from '../../db/db';
 import { syncLitterSchedule } from '../../domain/schedule';
 import { deleteWeight, updateWeight } from '../weights';
+import { interestKittenIds, kittenAssignmentPatch } from '../waitlist/model';
 import { nowISO, parseISODate, todayISO } from '../../lib/date';
 import type {
   BirthEventKind,
@@ -166,42 +167,52 @@ export async function updateSaleStatus(
 }
 
 /**
- * Verknüpft ein Kitten mit einem Interessenten — in beide Richtungen,
- * damit die Warteliste dieselbe Verbindung sieht.
+ * Verknüpft ein Kitten mit einem Interessenten — in beide Richtungen. Ein
+ * Interessent darf mehrere Kitten haben; nur das einzelne Kitten bleibt
+ * eindeutig genau einem Haushalt zugeordnet.
  */
 export async function linkInterest(kitten: Kitten, interestId?: ID): Promise<void> {
   await db.transaction('rw', db.kittens, db.interests, async () => {
     const current = await db.kittens.get(kitten.id);
-    if (!current || current.interestId === interestId) return;
+    if (!current) return;
 
     // Eine nicht mehr vorhandene Zielkennung darf die aktuelle Verbindung
     // nicht beschädigen.
     const next = interestId ? await db.interests.get(interestId) : undefined;
     if (interestId && !next) return;
 
-    if (current.interestId) {
-      const old = await db.interests.get(current.interestId);
-      if (old?.kittenId === current.id) {
-        await patch(db.interests, old.id, { kittenId: undefined });
+    // Eine bereits richtige Kitten-Seite kann aus einem alten Import stammen,
+    // in dem die Gegenrichtung noch fehlt. Beim nächsten Speichern reparieren.
+    if (current.interestId === interestId) {
+      if (next && !interestKittenIds(next).includes(current.id)) {
+        await patch(
+          db.interests,
+          next.id,
+          kittenAssignmentPatch([...interestKittenIds(next), current.id]),
+        );
       }
+      return;
     }
 
-    if (next?.kittenId && next.kittenId !== current.id) {
-      const formerlyLinked = await db.kittens.get(next.kittenId);
-      if (formerlyLinked?.interestId === next.id) {
-        const saleStatus =
-          formerlyLinked.saleStatus === 'reserved' || formerlyLinked.saleStatus === 'sold'
-            ? 'available'
-            : formerlyLinked.saleStatus;
-        await patch(db.kittens, formerlyLinked.id, {
-          interestId: undefined,
-          saleStatus,
-        });
+    if (current.interestId) {
+      const old = await db.interests.get(current.interestId);
+      if (old) {
+        await patch(
+          db.interests,
+          old.id,
+          kittenAssignmentPatch(interestKittenIds(old).filter((id) => id !== current.id)),
+        );
       }
     }
 
     await patch(db.kittens, current.id, { interestId });
-    if (next) await patch(db.interests, next.id, { kittenId: current.id });
+    if (next) {
+      await patch(
+        db.interests,
+        next.id,
+        kittenAssignmentPatch([...interestKittenIds(next), current.id]),
+      );
+    }
   });
 }
 
@@ -242,9 +253,15 @@ async function clearKittenReferences(kittenIds: ID[]): Promise<void> {
   if (kittenIds.length === 0) return;
   const ids = new Set(kittenIds);
 
-  const interests = await db.interests.where('kittenId').anyOf(kittenIds).toArray();
+  const interests = (await db.interests.toArray()).filter((interest) =>
+    interestKittenIds(interest).some((id) => ids.has(id)),
+  );
   for (const interest of interests) {
-    await patch(db.interests, interest.id, { kittenId: undefined });
+    await patch(
+      db.interests,
+      interest.id,
+      kittenAssignmentPatch(interestKittenIds(interest).filter((id) => !ids.has(id))),
+    );
   }
 
   const documents = await db.documents.where('kittenId').anyOf(kittenIds).toArray();

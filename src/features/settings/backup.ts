@@ -670,6 +670,7 @@ const ROW_SCHEMAS = {
     city: optional(isString),
     source: optional(isString),
     wishSex: oneOf(Object.keys(WISH_SEX_LABEL)),
+    wishSexes: optional(isArrayOf(oneOf(Object.keys(WISH_SEX_LABEL)))),
     wishTimeframe: optional(isString),
     allergySufferer: optional(isBoolean),
     hasOtherPets: optional(isBoolean),
@@ -679,6 +680,7 @@ const ROW_SCHEMAS = {
     offeredPriceCents: optional(isSafeInteger),
     status: oneOf(Object.keys(INTEREST_STATUS_LABEL)),
     sortIndex: isSafeInteger,
+    kittenIds: optional(isIdArray),
     kittenId: optional(isId),
     notes: optional(isString),
     deletedAt: optional(isISODateTime),
@@ -896,6 +898,7 @@ function validateBackupReferences(
       row.catId as string | undefined,
     ]),
     check('interests', kittenIds, 'ein fehlendes Kitten', (row) => [
+      ...((row.kittenIds as string[] | undefined) ?? []),
       row.kittenId as string | undefined,
     ]),
     check('interestNotes', interestIds, 'einen fehlenden Interessenten', (row) => [

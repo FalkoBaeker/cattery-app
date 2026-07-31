@@ -17,6 +17,7 @@ import {
 } from '../../ui';
 import type { Interest, WishSex } from '../../types';
 import { createInterest, updateInterest } from './store';
+import { interestWishSexes, wishSexPatch } from './model';
 
 interface FormState {
   name: string;
@@ -24,7 +25,7 @@ interface FormState {
   email: string;
   city: string;
   source: string;
-  wishSex: WishSex;
+  wishSexes: WishSex[];
   wishTimeframe: string;
   offeredPriceCents: number | null;
 }
@@ -36,7 +37,7 @@ function toForm(interest?: Interest): FormState {
     email: interest?.email ?? '',
     city: interest?.city ?? '',
     source: interest?.source ?? 'Homepage',
-    wishSex: interest?.wishSex ?? 'any',
+    wishSexes: interest ? interestWishSexes(interest) : ['any'],
     wishTimeframe: interest?.wishTimeframe ?? '',
     offeredPriceCents: interest?.offeredPriceCents ?? null,
   };
@@ -79,6 +80,20 @@ export function InterestSheet({
     setForm((f) => ({ ...f, [key]: value }));
   }
 
+  function setWish(index: number, value: WishSex) {
+    setForm((current) => ({
+      ...current,
+      wishSexes: current.wishSexes.map((sex, i) => (i === index ? value : sex)),
+    }));
+  }
+
+  function removeWish(index: number) {
+    setForm((current) => ({
+      ...current,
+      wishSexes: current.wishSexes.filter((_, i) => i !== index),
+    }));
+  }
+
   async function save() {
     setTouched(true);
     if (form.name.trim() === '') return;
@@ -91,7 +106,7 @@ export function InterestSheet({
           email: form.email.trim() || undefined,
           city: form.city.trim() || undefined,
           source: form.source.trim() || undefined,
-          wishSex: form.wishSex,
+          ...wishSexPatch(form.wishSexes),
           wishTimeframe: form.wishTimeframe.trim() || undefined,
           offeredPriceCents: form.offeredPriceCents ?? undefined,
         });
@@ -103,7 +118,8 @@ export function InterestSheet({
           email: form.email,
           city: form.city,
           source: form.source,
-          wishSex: form.wishSex,
+          wishSex: form.wishSexes[0],
+          wishSexes: form.wishSexes,
           wishTimeframe: form.wishTimeframe,
         });
         if (form.offeredPriceCents != null) {
@@ -175,16 +191,51 @@ export function InterestSheet({
           hint="Woher kam die Anfrage?"
           onChange={(e) => set('source', e.target.value)}
         />
-        <Segmented<WishSex>
-          label="Wunschgeschlecht"
-          value={form.wishSex}
-          onChange={(v) => set('wishSex', v)}
-          options={[
-            { value: 'any', label: 'egal' },
-            { value: 'male', label: 'Kater' },
-            { value: 'female', label: 'Katze' },
-          ]}
-        />
+        <div className="flex flex-col gap-2">
+          <div className="flex items-baseline justify-between gap-3 px-1">
+            <span className="text-[0.85rem] font-medium text-text-dim">Kittenwünsche</span>
+            <span className="text-[0.78rem] text-text-faint">
+              {form.wishSexes.length}{' '}
+              {form.wishSexes.length === 1 ? 'Wunsch' : 'Wünsche'}
+            </span>
+          </div>
+          {form.wishSexes.map((sex, index) => (
+            <div
+              key={index}
+              className="rounded-[var(--radius-card)] border border-border bg-surface p-3"
+            >
+              <Segmented<WishSex>
+                label={`Wunsch ${index + 1}`}
+                value={sex}
+                onChange={(value) => setWish(index, value)}
+                options={[
+                  { value: 'any', label: 'egal' },
+                  { value: 'male', label: 'Kater' },
+                  { value: 'female', label: 'Katze' },
+                ]}
+              />
+              {form.wishSexes.length > 1 && (
+                <Button
+                  className="mt-2"
+                  variant="ghost"
+                  size="sm"
+                  icon="trash"
+                  onClick={() => removeWish(index)}
+                >
+                  Diesen Wunsch entfernen
+                </Button>
+              )}
+            </div>
+          ))}
+          <Button
+            variant="quiet"
+            block
+            icon="plus"
+            onClick={() => set('wishSexes', [...form.wishSexes, 'any'])}
+          >
+            Weiteres Kitten gewünscht
+          </Button>
+        </div>
         <TextInput
           label="Wunschzeitraum"
           value={form.wishTimeframe}

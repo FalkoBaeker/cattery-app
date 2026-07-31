@@ -44,7 +44,6 @@ import {
 import {
   DEFAULT_SETTINGS,
   INTEREST_STATUS_LABEL,
-  WISH_SEX_LABEL,
   type ID,
   type Interest,
   type InterestStatus,
@@ -76,6 +75,7 @@ import { STATUS_CHAIN, STATUS_TONE } from './constants';
 import { Chip, ChipDivider, ChipRow, LoadingList } from './shared';
 import { InterestSheet } from './InterestSheet';
 import { BroadcastBanner, BroadcastComposeSheet, BroadcastRunSheet } from './Broadcast';
+import { interestWishSummary } from './model';
 
 /**
  * Vorlesetexte für das Sortieren. Ohne diese Angaben rendert dnd-kit seine
@@ -137,7 +137,7 @@ function InterestRow({
 
   const note = shortNote(interest.notes);
   const details = [
-    WISH_SEX_LABEL[interest.wishSex],
+    interestWishSummary(interest),
     interest.offeredPriceCents != null ? formatMoneyShort(interest.offeredPriceCents) : null,
     interest.city || null,
   ].filter(Boolean) as string[];

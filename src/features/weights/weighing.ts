@@ -7,8 +7,20 @@
  */
 
 import type { ID, ISODate, ISODateTime, WeightThresholds } from '../../types';
-import { ageInDays, exactDaysBetween, toISODate } from '../../lib/date';
-import { analyzeWeights, litterAverageWeight, type WeightAnalysis } from '../../domain/weight';
+import {
+  addDays,
+  ageInDays,
+  dateOf,
+  exactDaysBetween,
+  parseISODate,
+  toISODate,
+} from '../../lib/date';
+import {
+  analyzeWeights,
+  dailyWeightMeasurementTarget,
+  litterAverageWeight,
+  type WeightAnalysis,
+} from '../../domain/weight';
 import { ageDaysAt, sortSamples, type WeightSample } from './chart';
 
 /* ------------------------------------------------------------------ */
@@ -176,6 +188,99 @@ export function dayProgress(
     requiredMeasurements: kittenIds.length * target,
     creditedMeasurements,
   };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Nachtragen                                                         */
+/* ------------------------------------------------------------------ */
+
+export type WeighingSlot = 'morning' | 'evening';
+
+/** Stabiler lokaler Zeitpunkt für einen nachgetragenen Wiegedurchgang. */
+export function backfillAt(date: ISODate, slot: WeighingSlot): ISODateTime {
+  const value = parseISODate(date);
+  value.setHours(slot === 'morning' ? 8 : 20, 0, 0, 0);
+  return value.toISOString();
+}
+
+/** Nächster sinnvoller Durchgang: in Woche 1–2 abends, danach nächster Tag. */
+export function nextBackfillAt(current: ISODateTime, birthDate?: ISODate): ISODateTime {
+  const date = dateOf(current);
+  const target = dailyWeightMeasurementTarget(
+    birthDate ? ageInDays(birthDate, date) : undefined,
+  );
+  const hour = new Date(current).getHours();
+  if (target > 1 && hour < 14) return backfillAt(date, 'evening');
+  return backfillAt(addDays(date, 1), 'morning');
+}
+
+/** Kitten, deren Messung für genau diesen Morgen-/Abend-Durchgang schon vorliegt. */
+export function completedBackfillIds(
+  kittenIds: ID[],
+  entriesByKitten: ReadonlyMap<ID, WeightSample[]>,
+  at: ISODateTime,
+  birthDate?: ISODate,
+): ID[] {
+  const date = dateOf(at);
+  const target = dailyWeightMeasurementTarget(
+    birthDate ? ageInDays(birthDate, date) : undefined,
+  );
+  const requiredCount = target > 1 && new Date(at).getHours() >= 14 ? 2 : 1;
+  return kittenIds.filter(
+    (id) => measurementsOn(entriesByKitten.get(id) ?? [], date) >= requiredCount,
+  );
+}
+
+/**
+ * Findet ab der Geburt den ersten Tag, an dem mindestens einem Kitten noch
+ * eine Sollmessung fehlt. So beginnt eine Ersterfassung ohne Datums-Hopping.
+ */
+export function suggestedBackfillAt(
+  kittenIds: ID[],
+  entriesByKitten: ReadonlyMap<ID, WeightSample[]>,
+  birthDate: ISODate | undefined,
+  today: ISODate,
+): ISODateTime {
+  let date = birthDate && birthDate <= today ? birthDate : today;
+  while (date <= today) {
+    const target = dailyWeightMeasurementTarget(
+      birthDate ? ageInDays(birthDate, date) : undefined,
+    );
+    const counts = kittenIds.map((id) => measurementsOn(entriesByKitten.get(id) ?? [], date));
+    if (counts.some((count) => count < target)) {
+      const slot: WeighingSlot = target > 1 && counts.every((count) => count >= 1)
+        ? 'evening'
+        : 'morning';
+      return backfillAt(date, slot);
+    }
+    date = addDays(date, 1);
+  }
+  return backfillAt(today, 'morning');
+}
+
+/**
+ * Sucht nach `current` den nächsten wirklich unvollständigen Durchgang und
+ * überspringt Morgen/Abende, für die schon jedes Kitten einen Wert hat.
+ */
+export function nextMissingBackfillAt(
+  current: ISODateTime,
+  kittenIds: ID[],
+  entriesByKitten: ReadonlyMap<ID, WeightSample[]>,
+  birthDate: ISODate | undefined,
+  now: ISODateTime,
+): ISODateTime | null {
+  let candidate = nextBackfillAt(current, birthDate);
+  while (candidate <= now) {
+    const complete = completedBackfillIds(
+      kittenIds,
+      entriesByKitten,
+      candidate,
+      birthDate,
+    );
+    if (complete.length < kittenIds.length) return candidate;
+    candidate = nextBackfillAt(candidate, birthDate);
+  }
+  return null;
 }
 
 /* ------------------------------------------------------------------ */

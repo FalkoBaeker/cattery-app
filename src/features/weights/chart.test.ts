@@ -230,6 +230,23 @@ describe('buildChartModel', () => {
     expect(Number.isFinite(m.series[0].dots[0].py)).toBe(true);
   });
 
+  it('zeichnet zwei Messungen desselben Tages als sichtbare Linie', () => {
+    const m = buildChartModel({
+      series: [
+        {
+          kittenId: 'a',
+          label: 'Rot',
+          hex: '#e5484d',
+          entries: [sample(2026, 3, 3, 8, 95), sample(2026, 3, 3, 20, 101)],
+        },
+      ],
+      birthDate,
+    });
+    expect(m.series[0].nodes).toHaveLength(1);
+    expect(m.series[0].dots).toHaveLength(2);
+    expect(m.series[0].path).toContain('L');
+  });
+
   it('legt alle Punkte innerhalb der Zeichenfläche ab', () => {
     const m = buildChartModel({
       series: [series('a', [92, 105, 118, 130, 145])],

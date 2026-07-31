@@ -544,6 +544,16 @@ describe('filterInterests', () => {
     expect(found.map((i) => i.id)).toEqual(['a', 'c']);
   });
 
+  it('findet einen Haushalt über jeden seiner mehreren Wünsche', () => {
+    const multi = interest({
+      id: 'multi',
+      name: 'Familie Mehr',
+      wishSex: 'male',
+      wishSexes: ['male', 'female', 'male'],
+    });
+    expect(filterInterests([multi], { query: '', sex: 'female', status: 'all' })).toEqual([multi]);
+  });
+
   it('behält die Reihenfolge bei', () => {
     const found = filterInterests(items, { query: '', sex: 'male', status: 'all' });
     expect(found.map((i) => i.id)).toEqual(['b', 'c']);

@@ -375,7 +375,11 @@ export function buildChartModel({
       label: s.label,
       hex: s.hex,
       focus: focusKittenId ? s.kittenId === focusKittenId : true,
-      path: buildPath(nodes),
+      // Die Linie folgt den echten Messungen. Früher lief sie nur über
+      // Tagesmittel; zwei Wiegungen am selben Tag ergaben dadurch bloß einen
+      // winzigen Punkt und sahen in einer großen Wurfkurve wie Datenverlust
+      // aus. Tagesmittel bleiben als größere Knoten sichtbar.
+      path: buildPath(dots),
       nodes,
       dots,
       latestGrams: s.entries.length ? s.entries[s.entries.length - 1].grams : undefined,

@@ -143,7 +143,7 @@ describe('setReservedKitten', () => {
     expect(after?.saleStatus).toBe('reserved');
   });
 
-  it('gibt das vorherige Kitten wieder frei', async () => {
+  it('behält das vorherige Kitten und ergänzt eine zweite Zuordnung', async () => {
     const interest = await createInterest({ name: 'Anna' });
     await setInterestStatus(interest, 'reserved');
     const current = (await db.interests.get(interest.id)) as Interest;
@@ -155,9 +155,10 @@ describe('setReservedKitten', () => {
     const second = await makeKitten({ collarColor: 'blue' });
     await setReservedKitten(withFirst, second.id);
 
-    expect((await db.kittens.get(first.id))?.saleStatus).toBe('available');
-    expect((await db.kittens.get(first.id))?.interestId).toBeUndefined();
+    expect((await db.kittens.get(first.id))?.saleStatus).toBe('reserved');
+    expect((await db.kittens.get(first.id))?.interestId).toBe(interest.id);
     expect((await db.kittens.get(second.id))?.saleStatus).toBe('reserved');
+    expect((await db.interests.get(interest.id))?.kittenIds).toEqual([first.id, second.id]);
   });
 
   it('löst die Verknüpfung ganz', async () => {
@@ -214,6 +215,21 @@ describe('setInterestStatus', () => {
     await setInterestStatus(linked, 'completed');
 
     expect((await db.kittens.get(kitten.id))?.saleStatus).toBe('sold');
+  });
+
+  it('führt den Status für alle zugeordneten Kitten gemeinsam nach', async () => {
+    const interest = await createInterest({ name: 'Anna', wishSexes: ['male', 'female'] });
+    await setInterestStatus(interest, 'reserved');
+    const reserved = (await db.interests.get(interest.id)) as Interest;
+    const first = await makeKitten({ collarColor: 'red', sex: 'male' });
+    const second = await makeKitten({ collarColor: 'blue', sex: 'female' });
+    await setReservedKitten(reserved, first.id);
+    await setReservedKitten((await db.interests.get(interest.id))!, second.id);
+
+    await setInterestStatus((await db.interests.get(interest.id))!, 'completed');
+
+    expect((await db.kittens.get(first.id))?.saleStatus).toBe('sold');
+    expect((await db.kittens.get(second.id))?.saleStatus).toBe('sold');
   });
 
   it('lässt ein Kitten mit Zuchtvorbehalt in Ruhe', async () => {
