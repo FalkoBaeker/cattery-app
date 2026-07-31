@@ -6,12 +6,12 @@
  * routinemäßig gewogen, die Dosierung hängt aber daran.
  */
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Badge, Button, EmptyState, Icon, Section, useToast, type BadgeTone } from '../../ui';
 import { kittenLabel } from '../../types';
 import type { CareTask, ID, Kitten, Litter, Settings, WeightEntry } from '../../types';
-import { dueState, type DueState } from '../../domain/schedule';
+import { dueState, syncLitterSchedule, type DueState } from '../../domain/schedule';
 import { formatDate, formatDateTime, formatRelativeDay } from '../../lib/date';
 import { toggleTaskDone } from './data';
 import { groupTasksByWeek } from './litter';
@@ -50,6 +50,7 @@ export function ScheduleSection({
 }) {
   const navigate = useNavigate();
   const toast = useToast();
+  const [building, setBuilding] = useState(false);
 
   const kittenById = useMemo(() => new Map(kittens.map((k) => [k.id, k])), [kittens]);
   const groups = useMemo(
@@ -78,21 +79,51 @@ export function ScheduleSection({
     }
   }
 
+  /**
+   * Nachträglich erzeugen. Nötig für Würfe, die vor dem Fahrplan angelegt
+   * wurden oder deren Aufgaben versehentlich alle gelöscht wurden — sonst
+   * wäre der Leerzustand eine Sackgasse.
+   */
+  async function buildSchedule() {
+    setBuilding(true);
+    try {
+      await syncLitterSchedule(litter.id, settings);
+      toast.success('Fahrplan erstellt.');
+    } catch (e) {
+      toast.error('Fahrplan konnte nicht erstellt werden.');
+      console.error(e);
+    } finally {
+      setBuilding(false);
+    }
+  }
+
   if (tasks.length === 0) {
+    const hasBirthDate = Boolean(litter.birthDate);
     return (
       <Section title="Fahrplan">
         <EmptyState
           icon="calendar"
-          title={litter.birthDate ? 'Kein Fahrplan vorhanden' : 'Noch kein Geburtsdatum'}
+          title={hasBirthDate ? 'Kein Fahrplan vorhanden' : 'Noch kein Geburtsdatum'}
           description={
-            litter.birthDate
-              ? 'Für diesen Wurf sind keine Aufgaben hinterlegt.'
+            hasBirthDate
+              ? 'Aus dem Geburtsdatum entstehen Entwurmungen, Impfungen, Chippen, Kastration, Wurfmeldung und der früheste Abgabetermin.'
               : 'Aus dem Geburtsdatum entstehen Entwurmungen, Impfungen, Chippen, Kastration, Wurfmeldung und der früheste Abgabetermin — von selbst.'
           }
           action={
-            <Button icon="edit" onClick={onEditLitter}>
-              Geburtsdatum eintragen
-            </Button>
+            hasBirthDate ? (
+              <Button
+                variant="primary"
+                icon="calendar"
+                onClick={buildSchedule}
+                loading={building}
+              >
+                Fahrplan erstellen
+              </Button>
+            ) : (
+              <Button icon="edit" onClick={onEditLitter}>
+                Geburtsdatum eintragen
+              </Button>
+            )
           }
         />
       </Section>
