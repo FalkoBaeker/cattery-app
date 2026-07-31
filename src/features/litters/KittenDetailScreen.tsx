@@ -312,8 +312,13 @@ export function KittenDetailScreen() {
       confirmLabel: 'Aufheben',
     });
     if (!ok) return;
-    await revokeKittenDeath(kitten, settings);
-    toast.show('Vermerk aufgehoben');
+    try {
+      await revokeKittenDeath(kitten, settings);
+      toast.show('Vermerk aufgehoben');
+    } catch (e) {
+      toast.error('Der Vermerk konnte nicht aufgehoben werden.');
+      console.error(e);
+    }
   }
 
   const name = kittenLabel(kitten);
@@ -604,9 +609,14 @@ export function KittenDetailScreen() {
             danger: true,
           });
           if (!ok) return;
-          await markKittenDeceased(kitten, date, note, settings);
-          setDeathSheet(false);
-          toast.show('Vermerkt.');
+          try {
+            await markKittenDeceased(kitten, date, note, settings);
+            setDeathSheet(false);
+            toast.show('Vermerkt.');
+          } catch (e) {
+            toast.error('Der Vermerk konnte nicht gespeichert werden.');
+            console.error(e);
+          }
         }}
       />
     </Screen>

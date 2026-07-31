@@ -76,6 +76,29 @@ import { Chip, ChipDivider, ChipRow, LoadingList } from './shared';
 import { InterestSheet } from './InterestSheet';
 import { BroadcastBanner, BroadcastComposeSheet, BroadcastRunSheet } from './Broadcast';
 
+/**
+ * Vorlesetexte für das Sortieren. Ohne diese Angaben rendert dnd-kit seine
+ * englischen Vorgabetexte in die Seite — die einzige Stelle der App, an der
+ * Englisch erschiene.
+ */
+const DND_ACCESSIBILITY = {
+  screenReaderInstructions: {
+    draggable:
+      'Zum Sortieren: Eintrag mit Leertaste oder Eingabetaste aufnehmen, ' +
+      'mit den Pfeiltasten verschieben, erneut Leertaste zum Ablegen, ' +
+      'Escape zum Abbrechen.',
+  },
+  announcements: {
+    onDragStart: ({ active }: { active: { id: string | number } }) =>
+      `Eintrag ${active.id} aufgenommen.`,
+    onDragOver: ({ over }: { over: { id: string | number } | null }) =>
+      over ? `Eintrag wird über Position ${over.id} bewegt.` : 'Eintrag ist über keiner Position.',
+    onDragEnd: ({ over }: { over: { id: string | number } | null }) =>
+      over ? 'Eintrag abgelegt, Reihenfolge gespeichert.' : 'Eintrag abgelegt, Reihenfolge unverändert.',
+    onDragCancel: () => 'Sortieren abgebrochen, Reihenfolge unverändert.',
+  },
+};
+
 /* ================================================================== */
 /*  Eine Zeile                                                         */
 /* ================================================================== */
@@ -491,6 +514,7 @@ export function WaitlistScreen() {
             <DndContext
               sensors={sensors}
               collisionDetection={closestCenter}
+              accessibility={DND_ACCESSIBILITY}
               onDragStart={handleDragStart}
               onDragEnd={(e) => void handleDragEnd(e)}
               onDragCancel={() => {

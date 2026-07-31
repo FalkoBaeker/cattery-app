@@ -7,6 +7,7 @@ import {
   entryTimeText,
   groupByDay,
   leadText,
+  linksForKind,
   pendingFollowUps,
   reminderKey,
   splitCalendar,
@@ -548,5 +549,55 @@ describe('appointmentTitle', () => {
   it('fällt auf die Art zurück — auch bei leerem Titel', () => {
     expect(appointmentTitle({ kind: 'pickup', title: '   ' })).toBe('Abholung');
     expect(appointmentTitle({ kind: 'mating' })).toBe('Deckbesuch');
+  });
+});
+
+/* ================================================================== */
+/*  Bezüge beim Wechsel der Terminart                                  */
+/* ================================================================== */
+
+describe('linksForKind', () => {
+  const voll = { interestId: 'i1', catId: 'c1', litterId: 'l1' };
+
+  it('behält den Interessenten bei Besuchsarten und wirft die Tiere weg', () => {
+    for (const kind of ['meet_breeder', 'allergy_test', 'meet_kittens', 'pickup'] as const) {
+      expect(linksForKind(voll, kind)).toEqual({
+        interestId: 'i1',
+        catId: '',
+        litterId: '',
+      });
+    }
+  });
+
+  it('behält bei Tierarzt und Deckbesuch die Tiere und wirft den Interessenten weg', () => {
+    for (const kind of ['vet', 'mating'] as const) {
+      expect(linksForKind(voll, kind)).toEqual({
+        interestId: '',
+        catId: 'c1',
+        litterId: 'l1',
+      });
+    }
+  });
+
+  /**
+   * Der eigentliche Grund für diese Bereinigung: Das Auswahlfeld verschwindet
+   * beim Wechsel der Art aus dem Formular. Bliebe der alte Wert stehen, hinge
+   * der Interessent unsichtbar am Tierarzttermin — und ließe sich nicht mehr
+   * entfernen, weil das Feld nicht mehr sichtbar ist.
+   */
+  it('räumt beim Wechsel von Abholung auf Tierarzt den Interessenten weg', () => {
+    const nachher = linksForKind({ interestId: 'i1', catId: '', litterId: '' }, 'vet');
+    expect(nachher.interestId).toBe('');
+  });
+
+  it('räumt beim Wechsel von Tierarzt auf Kennenlernen die Tiere weg', () => {
+    const nachher = linksForKind({ interestId: '', catId: 'c1', litterId: 'l1' }, 'meet_breeder');
+    expect(nachher.catId).toBe('');
+    expect(nachher.litterId).toBe('');
+  });
+
+  it('lässt bei „Sonstiges" nichts stehen, was nicht angeboten wird', () => {
+    const nachher = linksForKind(voll, 'other');
+    expect(Object.values(nachher).every((v) => typeof v === 'string')).toBe(true);
   });
 });

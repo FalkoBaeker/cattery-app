@@ -72,6 +72,39 @@ describe('nextFocusId', () => {
     expect(nextFocusId(['a', 'b', 'c'], 'c', new Set(['a', 'b', 'c']))).toBeNull();
   });
 
+  /**
+   * In Woche 1–2 wird zweimal täglich gewogen. Die Kette darf sich deshalb
+   * am *Durchgang* orientieren, niemals am Tagesfortschritt — sonst wäre
+   * abends jedes Kitten schon „erledigt" und die Kette bräche sofort ab.
+   */
+  it('trägt den zweiten Durchgang desselben Tages vollständig durch', () => {
+    const ids = ['a', 'b', 'c'];
+
+    // Morgens: alle drei erfasst.
+    const morgens = new Set<string>();
+    let current: string | null = null;
+    for (let i = 0; i < 3; i++) {
+      const next: string | null = nextFocusId(ids, current, morgens);
+      expect(next).not.toBeNull();
+      morgens.add(next as string);
+      current = next;
+    }
+    expect(nextFocusId(ids, current, morgens)).toBeNull();
+
+    // Abends: neuer Durchgang, leere Menge — die Kette läuft wieder komplett.
+    const abends = new Set<string>();
+    const gesehen: string[] = [];
+    current = null;
+    for (let i = 0; i < 3; i++) {
+      const next: string | null = nextFocusId(ids, current, abends);
+      expect(next).not.toBeNull();
+      gesehen.push(next as string);
+      abends.add(next as string);
+      current = next;
+    }
+    expect(gesehen).toEqual(['a', 'b', 'c']);
+  });
+
   it('kommt mit einem einzigen Kitten zurecht', () => {
     expect(nextFocusId(['a'], 'a', new Set(['a']))).toBeNull();
     expect(nextFocusId(['a'], 'a', new Set())).toBe('a');

@@ -216,6 +216,31 @@ describe('setInterestStatus', () => {
     expect(after?.kittenId).toBeUndefined();
     expect((await db.kittens.get(kitten.id))?.saleStatus).toBe('available');
   });
+
+  /**
+   * Die Oberfläche bietet über die Statuskette ausdrücklich einen Weg aus der
+   * Absage heraus. Bleibt `deletedAt` dabei stehen, verschwindet der Eintrag
+   * trotzdem aus der Liste und wird nach 30 Tagen endgültig gelöscht.
+   */
+  it('holt einen Eintrag aus dem Papierkorb, sobald der Status wieder wechselt', async () => {
+    const interest = await createInterest({ name: 'Anna' });
+    await setInterestStatus(interest, 'declined');
+    const declined = (await db.interests.get(interest.id)) as Interest;
+    expect(declined.deletedAt).toBeTruthy();
+
+    await setInterestStatus(declined, 'contacted');
+
+    const after = await db.interests.get(interest.id);
+    expect(after?.status).toBe('contacted');
+    expect(after?.deletedAt).toBeUndefined();
+  });
+
+  it('lässt einen nie abgesagten Eintrag beim Statuswechsel unangetastet', async () => {
+    const interest = await createInterest({ name: 'Bea' });
+    await setInterestStatus(interest, 'shortlisted');
+    const after = await db.interests.get(interest.id);
+    expect(after?.deletedAt).toBeUndefined();
+  });
 });
 
 /* ================================================================== */

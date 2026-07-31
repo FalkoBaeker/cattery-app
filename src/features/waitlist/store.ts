@@ -132,14 +132,20 @@ export async function setReservedKitten(interest: Interest, kittenId?: ID): Prom
 
 /**
  * Setzt den Status und zieht das verknüpfte Kitten nach.
- * „Abgesagt" wandert zusätzlich in den Papierkorb (F71/F80).
+ *
+ * „Abgesagt" wandert zusätzlich in den Papierkorb (F71/F80). Jeder andere
+ * Status holt den Eintrag wieder heraus — sonst bliebe ein versehentlich
+ * abgesagter Interessent für immer im Papierkorb liegen, obwohl die
+ * Statuskette ausdrücklich einen Weg zurück anbietet.
  */
 export async function setInterestStatus(
   interest: Interest,
   status: InterestStatus,
 ): Promise<void> {
-  const changes: Partial<Interest> = { status };
-  if (status === 'declined') changes.deletedAt = nowISO();
+  const changes: Partial<Interest> = {
+    status,
+    deletedAt: status === 'declined' ? nowISO() : undefined,
+  };
   await patch(db.interests, interest.id, changes);
 
   if (!interest.kittenId) return;

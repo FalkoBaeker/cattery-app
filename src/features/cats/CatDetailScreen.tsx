@@ -548,7 +548,16 @@ export function CatDetailScreen() {
           title="Zeitstrahl"
           description="Alles zu dieser Katze, neueste Einträge zuerst."
         >
-          {heats === undefined || tests === undefined || litters === undefined ? (
+          {/* Auf *alle* Quellen warten, die in den Zeitstrahl einfließen.
+              Sonst erscheint kurz „Noch nichts passiert", obwohl z. B. ein
+              Tierarzttermin existiert — und dauerhaft, falls eine der
+              Abfragen scheitert. */}
+          {heats === undefined ||
+          tests === undefined ||
+          litters === undefined ||
+          appointments === undefined ||
+          weights === undefined ||
+          careTasks === undefined ? (
             <SectionLoading />
           ) : timeline.length === 0 ? (
             <EmptyState
@@ -588,9 +597,15 @@ export function CatDetailScreen() {
                   );
                 })}
               </List>
-              {timeline.length > shownTimeline.length && (
-                <Button block onClick={() => setFullTimeline(true)}>
-                  Alle {timeline.length} Einträge anzeigen
+              {/* Aufklappen muss sich auch wieder zuklappen lassen —
+                  sonst scrollt man bei einer alten Katze ewig. */}
+              {timeline.length > 12 && (
+                <Button
+                  block
+                  onClick={() => setFullTimeline((v) => !v)}
+                  iconRight={fullTimeline ? 'chevron-up' : 'chevron-down'}
+                >
+                  {fullTimeline ? 'Weniger anzeigen' : `Alle ${timeline.length} Einträge anzeigen`}
                 </Button>
               )}
             </div>
@@ -793,7 +808,15 @@ function HealthGroupRows({
           </span>
         }
         title={group.title}
-        subtitle={[formatDate(latest.date), latest.result?.trim() || undefined, status.text]
+        /* Das konkrete Fälligkeitsdatum gehört hierher — sonst muss man das
+           Bearbeiten-Blatt öffnen, um zu sehen, wann der nächste
+           Ultraschall ansteht. HCM und PKD laufen halbjährlich. */
+        subtitle={[
+          formatDate(latest.date),
+          latest.result?.trim() || undefined,
+          status.nextDue ? `nächste Fälligkeit ${formatDate(status.nextDue)}` : undefined,
+          status.text,
+        ]
           .filter(Boolean)
           .join(' · ')}
         trailing={
