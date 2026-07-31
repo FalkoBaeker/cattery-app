@@ -149,32 +149,6 @@ describe('WeighScreen', () => {
     );
   });
 
-  it('trägt einen alten Wurf durchgängig nach und springt ohne weitere Klicks zum Abend', async () => {
-    const user = userEvent.setup();
-    const birthDate = addDays(todayISO(), -1);
-    await db.litters.update('l1', { birthDate });
-    renderScreen();
-
-    await user.click(await screen.findByRole('button', { name: 'Fehlende nachtragen' }));
-    expect(document.activeElement?.id).toBe('weigh-k1');
-    await user.keyboard('95{Enter}101{Enter}98{Enter}');
-
-    await waitFor(async () => {
-      expect(await db.weights.count()).toBe(3);
-      expect(document.activeElement?.id).toBe('weigh-k1');
-    });
-    const morning = await db.weights.toArray();
-    expect(morning.every((entry) => new Date(entry.at).getHours() === 8)).toBe(true);
-
-    // Der zweite Durchgang startet automatisch am Abend desselben Tages.
-    await user.keyboard('99{Enter}105{Enter}102{Enter}');
-    await waitFor(async () => expect(await db.weights.count()).toBe(6));
-    const evening = (await db.weights.toArray()).filter(
-      (entry) => new Date(entry.at).getHours() === 20,
-    );
-    expect(evening).toHaveLength(3);
-  });
-
   it('zeigt den letzten Wert nur als Platzhalter und speichert ihn nicht mit', async () => {
     await db.weights.put({ id: 'w1', kittenId: 'k1', at: '2026-03-05T07:00:00.000Z', grams: 128 });
     const user = userEvent.setup();

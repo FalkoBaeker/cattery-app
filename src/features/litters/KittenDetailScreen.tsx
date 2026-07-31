@@ -465,9 +465,18 @@ export function KittenDetailScreen() {
           title="Gewicht"
           action={
             litter && (
-              <Button size="sm" icon="scale" onClick={() => navigate(`/wiegen/${litter.id}`)}>
-                Wiegen
-              </Button>
+              <div className="flex gap-1">
+                <Button size="sm" icon="scale" onClick={() => navigate(`/wiegen/${litter.id}`)}>
+                  Wiegen
+                </Button>
+                <Button
+                  size="sm"
+                  icon="calendar"
+                  onClick={() => navigate(`/zucht/kitten/${kitten.id}/gewicht-nachtragen`)}
+                >
+                  Nachtragen
+                </Button>
+              </div>
             )
           }
         >

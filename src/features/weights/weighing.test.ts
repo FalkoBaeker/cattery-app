@@ -2,20 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_SETTINGS } from '../../types';
 import {
   analyzeKitten,
-  backfillAt,
-  completedBackfillIds,
   dayOfLife,
   dayOfLifeLabel,
   dayProgress,
   deltaToPrevious,
   latestDelta,
   measurementsOn,
-  nextBackfillAt,
-  nextMissingBackfillAt,
   nextFocusId,
   parseGrams,
   previousSample,
-  suggestedBackfillAt,
 } from './weighing';
 import type { WeightSample } from './chart';
 
@@ -287,62 +282,6 @@ describe('dayOfLifeLabel', () => {
     expect(dayOfLifeLabel(undefined, '2026-03-03')).toBe('Ohne Geburtsdatum');
   });
 });
-
-describe('Nachtragsdurchgänge', () => {
-  it('findet den ersten unvollständigen Abend und überspringt fertige Kitten', () => {
-    const entries = new Map<string, WeightSample[]>([
-      ['k1', [sample(2026, 3, 3, 8, 95)]],
-      ['k2', [sample(2026, 3, 3, 8, 96), sample(2026, 3, 3, 20, 101)]],
-    ]);
-
-    const suggested = suggestedBackfillAt(['k1', 'k2'], entries, '2026-03-03', '2026-03-05');
-    expect(new Date(suggested).getHours()).toBe(20);
-    expect(completedBackfillIds(['k1', 'k2'], entries, suggested, '2026-03-03')).toEqual(['k2']);
-  });
-
-  it('springt in den ersten zwei Wochen vom Morgen zum Abend, später zum nächsten Tag', () => {
-    const morning = backfillAt('2026-03-08', 'morning');
-    const evening = nextBackfillAt(morning, '2026-03-03');
-    expect(new Date(evening).getHours()).toBe(20);
-    expect(nextBackfillAt(evening, '2026-03-03')).toBe(backfillAt('2026-03-09', 'morning'));
-
-    expect(nextBackfillAt(backfillAt('2026-03-23', 'morning'), '2026-03-03')).toBe(
-      backfillAt('2026-03-24', 'morning'),
-    );
-  });
-
-  it('überspringt bereits vollständige Durchgänge', () => {
-    const entries = new Map<string, WeightSample[]>([
-      [
-        'k1',
-        [
-          sample(2026, 3, 3, 8, 95),
-          sample(2026, 3, 3, 20, 100),
-          sample(2026, 3, 4, 8, 106),
-        ],
-      ],
-      [
-        'k2',
-        [
-          sample(2026, 3, 3, 8, 96),
-          sample(2026, 3, 3, 20, 101),
-          sample(2026, 3, 4, 8, 107),
-        ],
-      ],
-    ]);
-    expect(
-      nextMissingBackfillAt(
-        backfillAt('2026-03-03', 'evening'),
-        ['k1', 'k2'],
-        entries,
-        '2026-03-03',
-        backfillAt('2026-03-05', 'evening'),
-      ),
-    ).toBe(backfillAt('2026-03-04', 'evening'));
-  });
-});
-
-/* ------------------------------------------------------------------ */
 
 describe('analyzeKitten', () => {
   it('meldet ohne Messung „Keine Daten"', () => {

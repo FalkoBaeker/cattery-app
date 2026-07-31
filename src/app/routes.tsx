@@ -30,6 +30,11 @@ const CatDetailScreen = lazy(() =>
 const WeighScreen = lazy(() =>
   import('../features/weights/WeighScreen').then((module) => ({ default: module.WeighScreen })),
 );
+const WeightBackfillScreen = lazy(() =>
+  import('../features/weights/WeightBackfillScreen').then((module) => ({
+    default: module.WeightBackfillScreen,
+  })),
+);
 const WaitlistScreen = lazy(() =>
   import('../features/waitlist/WaitlistScreen').then((module) => ({
     default: module.WaitlistScreen,
@@ -131,6 +136,14 @@ export const router = createHashRouter([
         element: (
           <ModuleGuard modules={['litters', 'weights']} requireAll>
             <WeighScreen />
+          </ModuleGuard>
+        ),
+      },
+      {
+        path: 'zucht/kitten/:kittenId/gewicht-nachtragen',
+        element: (
+          <ModuleGuard modules={['litters', 'weights']} requireAll>
+            <WeightBackfillScreen />
           </ModuleGuard>
         ),
       },
