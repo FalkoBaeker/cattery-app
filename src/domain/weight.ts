@@ -167,9 +167,10 @@ export function analyzeWeights(
     }
   }
 
-  // Diese beiden Punkte gelten unabhängig von der Zunahme.
+  // Diese beiden Punkte gelten unabhängig von der Zunahme. Kritisch bleibt
+  // kritisch — alles andere wird auf „auffällig" angehoben.
   if (options.birthWeightG && options.birthWeightG < thresholds.concernBirthWeightG) {
-    if (level === 'ok' || level === 'unknown' || level === 'watch') level = 'concern';
+    if (level !== 'critical') level = 'concern';
     reasons.push(
       `Geburtsgewicht ${options.birthWeightG} g liegt unter ${thresholds.concernBirthWeightG} g.`,
     );
@@ -178,7 +179,7 @@ export function analyzeWeights(
   if (options.litterAverageG && options.litterAverageG > 0) {
     const belowPercent = ((options.litterAverageG - latest.grams) / options.litterAverageG) * 100;
     if (belowPercent >= thresholds.belowLitterAvgPercent) {
-      if (level === 'ok' || level === 'unknown' || level === 'watch') level = 'concern';
+      if (level !== 'critical') level = 'concern';
       reasons.push(
         `${belowPercent.toFixed(0)} % unter dem Wurfdurchschnitt (${Math.round(options.litterAverageG)} g).`,
       );
