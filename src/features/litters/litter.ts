@@ -123,7 +123,8 @@ export function pregnancyInfo(
 /*  Zusammenfassung eines Wurfes                                       */
 /* ------------------------------------------------------------------ */
 
-export type KittenLike = Pick<Kitten, 'id' | 'stillborn' | 'saleStatus' | 'sex'>;
+export type KittenLike = Pick<Kitten, 'id' | 'stillborn' | 'saleStatus' | 'sex'> &
+  Partial<Pick<Kitten, 'diedAt'>>;
 
 export interface LitterSummary {
   /** Alle erfassten Kitten, auch totgeborene. */
@@ -159,8 +160,10 @@ export interface LitterSummary {
 }
 
 /** Ein Kitten gilt als lebend, solange es weder totgeboren noch verstorben ist. */
-export function isLivingKitten(k: Pick<Kitten, 'stillborn' | 'saleStatus'>): boolean {
-  return !k.stillborn && k.saleStatus !== 'deceased';
+export function isLivingKitten(
+  k: Pick<Kitten, 'stillborn' | 'saleStatus'> & Partial<Pick<Kitten, 'diedAt'>>,
+): boolean {
+  return !k.stillborn && k.saleStatus !== 'deceased' && !k.diedAt;
 }
 
 /**
@@ -206,7 +209,7 @@ export function summarizeLitter(
     total: kittens.length,
     alive: alive.length,
     stillborn: kittens.filter((k) => k.stillborn).length,
-    deceased: kittens.filter((k) => !k.stillborn && k.saleStatus === 'deceased').length,
+    deceased: kittens.filter((k) => !k.stillborn && !isLivingKitten(k)).length,
     males: countSex('male'),
     females: countSex('female'),
     unknownSex: countSex('unknown'),

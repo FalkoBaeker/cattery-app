@@ -29,7 +29,7 @@ import type {
 import { db, patch } from '../../db/db';
 import { syncLitterSchedule } from '../../domain/schedule';
 import { addKitten, linkInterest, noonOf, revokeKittenDeath, syncBirthWeightEntry } from './data';
-import { suggestCollarColor } from './litter';
+import { isLivingKitten, suggestCollarColor } from './litter';
 import { CollarPicker, SexPicker } from './parts';
 
 /** „Verstorben" wird über den eigenen, behutsamen Vorgang gesetzt. */
@@ -84,6 +84,7 @@ export function KittenEditorSheet({
   const [interestId, setInterestId] = useState('');
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  const deathMarked = Boolean(kitten && !isLivingKitten(kitten));
 
   // Nur beim Öffnen füllen, damit Schreibvorgänge im Hintergrund kein
   // halb ausgefülltes Formular zurücksetzen.
@@ -101,10 +102,10 @@ export function KittenEditorSheet({
     setBirthWeightG(kitten?.birthWeightG ?? null);
     setChipNo(kitten?.chipNo ?? '');
     setPriceCents(kitten?.priceCents ?? settings.defaultKittenPriceCents ?? null);
-    setSaleStatus(kitten?.saleStatus === 'deceased' ? 'available' : (kitten?.saleStatus ?? 'available'));
+    setSaleStatus(deathMarked ? 'available' : (kitten?.saleStatus ?? 'available'));
     setInterestId(kitten?.interestId ?? '');
     setNotes(kitten?.notes ?? '');
-  }, [open, kitten, usedColors, settings.defaultKittenPriceCents]);
+  }, [open, kitten, usedColors, settings.defaultKittenPriceCents, deathMarked]);
 
   const statusChangesSchedule =
     kitten != null &&
@@ -123,7 +124,7 @@ export function KittenEditorSheet({
           birthWeightG: birthWeightG ?? undefined,
           chipNo: chipNo.trim() || undefined,
           priceCents: priceCents ?? undefined,
-          saleStatus: statusBefore === 'deceased' ? statusBefore : saleStatus,
+          saleStatus: deathMarked ? statusBefore : saleStatus,
           notes: notes.trim() || undefined,
         });
         await linkInterest(kitten, interestId || undefined);
@@ -132,7 +133,7 @@ export function KittenEditorSheet({
         await syncBirthWeightEntry(kitten, birthWeightG ?? undefined);
         await syncLitterSchedule(kitten.litterId, settings);
 
-        if (statusBefore !== 'deceased' && statusBefore !== saleStatus) {
+        if (!deathMarked && statusBefore !== saleStatus) {
           if (saleStatus === 'sold_breeding_reserved') {
             toast.show('Zuchtvorbehalt vermerkt — die Kastration steht nicht mehr im Fahrplan.', {
               tone: 'warn',
@@ -238,7 +239,7 @@ export function KittenEditorSheet({
 
         <MoneyInput label="Preis" valueCents={priceCents} onValueChange={setPriceCents} />
 
-        {kitten?.saleStatus === 'deceased' ? (
+        {deathMarked ? (
           <Callout tone="neutral" icon="info" title="Als verstorben vermerkt">
             <p>Der Verkaufsstatus lässt sich deshalb hier nicht ändern.</p>
             <Button className="mt-2" size="sm" loading={saving} onClick={revive}>

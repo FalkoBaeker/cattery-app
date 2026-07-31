@@ -201,15 +201,20 @@ export function ContractEditorScreen() {
   }
 
   async function pdfErzeugen(teilen: boolean) {
-    if (!gesetzt || !entwurf) return;
+    if (!entwurf || !settings) return;
     setArbeitet(true);
     try {
       // Erst speichern, damit das PDF genau zum gespeicherten Stand passt.
       const c = await speichern();
       if (!c) return;
-      const blob = await vertragsPdfBlob(gesetzt);
+      // `speichern` normalisiert den Entwurf. Der aktuelle Callback sieht aber
+      // weiterhin den Zustand vor dem anschließenden React-Render. Deshalb den
+      // gesetzten Vertrag ausdrücklich aus den wirklich gespeicherten Daten
+      // aufbauen — sonst könnten Datenbank und unterschriebenes PDF abweichen.
+      const gespeicherterText = rendereVertrag({ data: c.data, seller: settings.seller });
+      const blob = await vertragsPdfBlob(gespeicherterText);
       await pdfAmVertragSpeichern(c, blob);
-      const name = dateiname(gesetzt.titel, tierNamen(entwurf));
+      const name = dateiname(gespeicherterText.titel, tierNamen(c.data));
       if (teilen) {
         const ergebnis = await teilenOderHerunterladen(blob, name);
         if (ergebnis === 'heruntergeladen') toast.show('PDF gespeichert');
@@ -863,7 +868,11 @@ function KittenWahl({
   }, []);
 
   const passend = (daten?.kitten ?? []).filter(
-    (k) => !k.stillborn && k.saleStatus !== 'deceased' && (!nurWeiblich || k.sex !== 'male'),
+    (k) =>
+      !k.stillborn &&
+      k.saleStatus !== 'deceased' &&
+      !k.diedAt &&
+      (!nurWeiblich || k.sex !== 'male'),
   );
 
   function wurfVon(k: Kitten): Litter | undefined {

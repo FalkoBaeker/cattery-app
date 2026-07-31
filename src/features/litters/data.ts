@@ -152,9 +152,17 @@ export async function updateSaleStatus(
   saleStatus: KittenSaleStatus,
   settings: Settings,
 ): Promise<void> {
-  if (kitten.saleStatus === saleStatus) return;
-  await patch(db.kittens, kitten.id, { saleStatus });
-  await syncLitterSchedule(kitten.litterId, settings);
+  // Frisch lesen: Zwischen Öffnen des Blatts und Tippen kann der Sterbevermerk
+  // gesetzt worden sein. Er darf ausschließlich über `revokeKittenDeath`
+  // aufgehoben werden, weil nur dieser Vorgang auch Datum und Notiz entfernt.
+  const current = await db.kittens.get(kitten.id);
+  if (!current) return;
+  if (current.stillborn || current.saleStatus === 'deceased' || current.diedAt) {
+    throw new Error('Der Sterbevermerk muss zuerst ausdrücklich aufgehoben werden.');
+  }
+  if (current.saleStatus === saleStatus) return;
+  await patch(db.kittens, current.id, { saleStatus });
+  await syncLitterSchedule(current.litterId, settings);
 }
 
 /**

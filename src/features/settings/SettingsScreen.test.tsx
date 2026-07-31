@@ -4,7 +4,8 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { SettingsScreen } from './SettingsScreen';
 import { ConfirmProvider, ToastProvider } from '../../ui';
-import { clearSettingsCache, db, wipeDatabase } from '../../db/db';
+import { clearSettingsCache, db, insert, wipeDatabase } from '../../db/db';
+import { syncLitterSchedule } from '../../domain/schedule';
 import { DEFAULT_SETTINGS } from '../../types';
 
 function renderScreen() {
@@ -101,6 +102,36 @@ describe('SettingsScreen', () => {
     await waitFor(async () => {
       const stored = await db.settings.get('singleton');
       expect(stored?.schedule.dewormingWeeks).toEqual([3, 5, 9]);
+    });
+  });
+
+  it('zieht geänderte Fahrplan-Wochen für vorhandene Würfe nach', async () => {
+    const litter = await insert(db.litters, {
+      motherId: 'mutter',
+      status: 'born',
+      birthDate: '2026-03-01',
+    });
+    await syncLitterSchedule(litter.id, DEFAULT_SETTINGS);
+    const before = await db.careTasks.where('litterId').equals(litter.id).toArray();
+    const erledigt = before.find((task) => task.planKey === 'deworming:2')!;
+    await db.careTasks.update(erledigt.id, { doneAt: '2026-04-01' });
+
+    const user = userEvent.setup();
+    renderScreen();
+    await user.click(await screen.findByRole('button', { name: /Fahrplan/ }));
+    const weeks = await screen.findByLabelText('Entwurmung in Woche');
+    await user.clear(weeks);
+    await user.type(weeks, '3 5 9');
+    await user.click(screen.getByRole('button', { name: 'Speichern' }));
+
+    await waitFor(async () => {
+      const tasks = await db.careTasks.where('litterId').equals(litter.id).toArray();
+      const byKey = new Map(tasks.map((task) => [task.planKey, task]));
+      expect(byKey.get('deworming:1')?.dueDate).toBe('2026-03-22');
+      // Erledigt: weder Datum noch Haken verändern.
+      expect(byKey.get('deworming:2')?.dueDate).toBe('2026-04-12');
+      expect(byKey.get('deworming:2')?.doneAt).toBe('2026-04-01');
+      expect(byKey.get('deworming:3')?.dueDate).toBe('2026-05-03');
     });
   });
 

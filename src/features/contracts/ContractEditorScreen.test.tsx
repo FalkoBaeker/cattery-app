@@ -6,6 +6,8 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { ConfirmProvider, ToastProvider } from '../../ui';
 import { db, updateSettings, wipeDatabase } from '../../db/db';
 import { ContractEditorScreen } from './ContractEditorScreen';
+import * as contractPdf from './pdf';
+import { vertragAlsText } from './render';
 
 function zeichne(pfad: string) {
   return render(
@@ -135,6 +137,31 @@ describe('Vertragseditor', () => {
 
     expect((await db.contracts.toArray())[0].data.breedingUseMonths).toBe(18);
     expect((await db.breedingUses.toArray())[0].months).toBe(18);
+  });
+
+  it('erzeugt das PDF aus demselben normalisierten Stand wie den Vertrag', async () => {
+    const pdfSpy = vi
+      .spyOn(contractPdf, 'vertragsPdfBlob')
+      .mockResolvedValue(new Blob(['PDF'], { type: 'application/pdf' }));
+    const nutzer = userEvent.setup();
+    zeichne('/mehr/vertraege/neu?art=zuchtnutzung');
+
+    const months = await screen.findByLabelText('Nutzungsfrist');
+    await nutzer.clear(months);
+    await nutzer.type(months, '0');
+    const pdfButton = screen.getByRole('button', { name: 'PDF erzeugen' });
+    await act(async () => {
+      fireEvent.click(pdfButton);
+      await vi.waitFor(async () => expect(await db.attachments.count()).toBe(1));
+    });
+    await waitFor(() => expect(pdfButton).not.toHaveAttribute('aria-busy'));
+    const vertrag = (await db.contracts.toArray())[0];
+    const pdfText = vertragAlsText(pdfSpy.mock.calls[0][0]);
+
+    expect(vertrag.data.breedingUseMonths).toBe(18);
+    expect(pdfText).toContain('innerhalb von 18 Monaten');
+    expect(pdfText).not.toContain('innerhalb von 0 Monaten');
+    pdfSpy.mockRestore();
   });
 
   it('zeigt beim Zuchtnutzungsvertrag die Fristfelder statt der Übergabe', async () => {

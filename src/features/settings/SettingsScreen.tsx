@@ -55,6 +55,7 @@ import {
   type BackupProgress,
 } from './backup';
 import { clampNumber, clampWeek, describeWeekList, formatWeekList, parseWeekList } from './weekList';
+import { saveScheduleSettings } from './scheduleSettings';
 
 type SheetKey =
   | 'seller'
@@ -98,6 +99,18 @@ export function SettingsScreen() {
       return true;
     } catch {
       toast.error('Das konnte nicht gespeichert werden.');
+      return false;
+    }
+  }
+
+  async function applySchedule(schedule: SchedulePlan) {
+    if (!settings) return false;
+    try {
+      await saveScheduleSettings(settings, schedule);
+      toast.success('Fahrplan gespeichert und vorhandene Würfe aktualisiert.');
+      return true;
+    } catch {
+      toast.error('Der Fahrplan konnte nicht gespeichert werden.');
       return false;
     }
   }
@@ -357,7 +370,7 @@ export function SettingsScreen() {
         onClose={() => setSheet(null)}
         value={settings.schedule}
         onSave={async (schedule) => {
-          if (await apply({ schedule })) setSheet(null);
+          if (await applySchedule(schedule)) setSheet(null);
         }}
       />
       <WhatsAppSheet

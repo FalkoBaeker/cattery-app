@@ -27,13 +27,16 @@ export interface PlannedTask {
 /** Kitten, für die keine Kastration geplant wird. */
 function skipsNeutering(k: Kitten): boolean {
   return (
-    k.saleStatus === 'sold_breeding_reserved' || k.saleStatus === 'deceased' || k.stillborn
+    k.saleStatus === 'sold_breeding_reserved' ||
+    k.saleStatus === 'deceased' ||
+    k.stillborn ||
+    Boolean(k.diedAt)
   );
 }
 
 /** Kitten, die überhaupt keine Aufgaben mehr brauchen. */
 function isGone(k: Kitten): boolean {
-  return k.stillborn || k.saleStatus === 'deceased';
+  return k.stillborn || k.saleStatus === 'deceased' || Boolean(k.diedAt);
 }
 
 /**
@@ -166,6 +169,15 @@ export async function syncLitterSchedule(litterId: ID, settings: Settings): Prom
   for (const orphan of byKey.values()) {
     if (orphan.doneAt) continue;
     await db.careTasks.delete(orphan.id);
+  }
+}
+
+/** Zieht einen geänderten Fahrplan für alle bereits geborenen Würfe nach. */
+export async function syncAllLitterSchedules(settings: Settings): Promise<void> {
+  const litters = await db.litters.toArray();
+  for (const litter of litters) {
+    if (!litter.birthDate) continue;
+    await syncLitterSchedule(litter.id, settings);
   }
 }
 

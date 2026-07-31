@@ -121,7 +121,7 @@ export function KittenDetailScreen() {
     if (!data || data.missing || !settings) return undefined;
     const byKitten = new Map<ID, { at: string; grams: number }[]>();
     for (const k of data.siblings) {
-      if (k.stillborn || k.saleStatus === 'deceased') continue;
+      if (!isLivingKitten(k)) continue;
       byKitten.set(k.id, []);
     }
     for (const w of data.siblingWeights) {
@@ -287,7 +287,7 @@ export function KittenDetailScreen() {
   /* --- Vorgänge ----------------------------------------------------- */
 
   async function changeSaleStatus(next: KittenSaleStatus) {
-    if (!settings) return;
+    if (!settings || !isLivingKitten(kitten)) return;
     const before = kitten.saleStatus;
     try {
       await updateSaleStatus(kitten, next, settings);
@@ -328,6 +328,7 @@ export function KittenDetailScreen() {
   }
 
   const name = kittenLabel(kitten);
+  const living = isLivingKitten(kitten);
 
   return (
     <Screen
@@ -430,7 +431,7 @@ export function KittenDetailScreen() {
               leading={<Icon name="star" size={20} className="text-text-dim" />}
               title="Verkaufsstatus"
               subtitle={`${KITTEN_SALE_STATUS_LABEL[kitten.saleStatus]} — ${SALE_HINT[kitten.saleStatus]}`}
-              onClick={() => setSaleSheet(true)}
+              onClick={living ? () => setSaleSheet(true) : undefined}
             />
             <ListRow
               leading={<Icon name="user" size={20} className="text-text-dim" />}
@@ -446,7 +447,7 @@ export function KittenDetailScreen() {
         </Section>
 
         {/* --- Persönliches Kunden-Update --------------------------- */}
-        {!kitten.stillborn && kitten.saleStatus !== 'deceased' && (
+        {living && (
           <Section
             title="Kunden-Update"
             description={
@@ -571,7 +572,7 @@ export function KittenDetailScreen() {
         )}
 
         {/* --- Verstorben --------------------------------------------- */}
-        {kitten.saleStatus === 'deceased' || kitten.stillborn ? (
+        {!living ? (
           <Button block icon="refresh" onClick={revive}>
             Vermerk „verstorben" aufheben
           </Button>
@@ -603,7 +604,7 @@ export function KittenDetailScreen() {
         settings={settings}
       />
 
-      <Sheet open={saleSheet} onClose={() => setSaleSheet(false)} title="Verkaufsstatus">
+      <Sheet open={saleSheet && living} onClose={() => setSaleSheet(false)} title="Verkaufsstatus">
         <div className="flex flex-col gap-4">
           <ChoiceGrid<KittenSaleStatus>
             columns={1}

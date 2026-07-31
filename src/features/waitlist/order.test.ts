@@ -282,6 +282,10 @@ describe('buildWhatsAppUrl', () => {
     expect(buildWhatsAppUrl('0170 1234567')).toBe('https://wa.me/491701234567');
   });
 
+  it('entfernt die in internationaler Schreibweise eingeklammerte deutsche 0', () => {
+    expect(buildWhatsAppUrl('+49 (0)171 1234567')).toBe('https://wa.me/491711234567');
+  });
+
   it('kodiert Umlaute als UTF-8', () => {
     expect(buildWhatsAppUrl('+49 170 1234567', 'Grüße, Jörg!')).toBe(
       'https://wa.me/491701234567?text=Gr%C3%BC%C3%9Fe%2C%20J%C3%B6rg!',
@@ -311,6 +315,7 @@ describe('buildTelUrl', () => {
   it('schreibt international', () => {
     expect(buildTelUrl('0170 123 4567')).toBe('tel:+491701234567');
     expect(buildTelUrl('+43 664 1234567')).toBe('tel:+436641234567');
+    expect(buildTelUrl('0049 (0)171 1234567')).toBe('tel:+491711234567');
   });
 
   it('behält kurze Nummern unverändert bei', () => {

@@ -158,6 +158,23 @@ describe('updateSaleStatus', () => {
     await updateSaleStatus(kitten, 'available', settings);
     expect((await db.kittens.get(kitten.id))!.updatedAt).toBe(before);
   });
+
+  it('hebt einen Sterbevermerk nicht über einen veralteten Verkaufsstatus auf', async () => {
+    const litter = await makeLitter({ birthDate: '2026-03-01' });
+    const kitten = await addKitten({ litterId: litter.id, collarColor: 'red' }, settings);
+    await markKittenDeceased(kitten, '2026-03-04', 'nachts eingeschlafen', settings);
+
+    // Der Bildschirm könnte noch das lebende Objekt von vor dem Vermerk halten.
+    await expect(updateSaleStatus(kitten, 'available', settings)).rejects.toThrow(
+      /Sterbevermerk/,
+    );
+
+    const after = await db.kittens.get(kitten.id);
+    expect(after?.saleStatus).toBe('deceased');
+    expect(after?.diedAt).toBe('2026-03-04');
+    expect(after?.deathNote).toBe('nachts eingeschlafen');
+    expect(await neuterTasks(kitten.id)).toHaveLength(0);
+  });
 });
 
 describe('toggleTaskDone', () => {

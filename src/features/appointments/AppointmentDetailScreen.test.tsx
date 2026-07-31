@@ -141,6 +141,25 @@ describe('AppointmentDetailScreen — Bearbeiten', () => {
     expect(await screen.findByText('Dieser Termin ist abgesagt')).toBeInTheDocument();
   });
 
+  it('markiert offene Erinnerungsfenster beim Zurücknehmen einer Absage als gesehen', async () => {
+    const a = await insert(db.appointments, {
+      kind: 'meet_breeder',
+      startAt: new Date(Date.now() + 30 * 60_000).toISOString(),
+      remind24h: true,
+      remind1h: true,
+      cancelledAt: new Date().toISOString(),
+    });
+
+    wrap(`/kalender/${a.id}`);
+    await userEvent.click(await screen.findByRole('button', { name: /Absage zurücknehmen/ }));
+
+    await waitFor(async () => {
+      expect((await db.appointments.get(a.id))?.cancelledAt).toBeUndefined();
+      const keys = (await db.notificationLog.toArray()).map((row) => row.key).sort();
+      expect(keys).toEqual([`appt:${a.id}:1h`, `appt:${a.id}:24h`]);
+    });
+  });
+
   it('fragt vor dem Löschen nach', async () => {
     const a = await insert(db.appointments, {
       kind: 'vet',

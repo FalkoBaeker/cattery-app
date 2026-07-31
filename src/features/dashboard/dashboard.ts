@@ -152,7 +152,7 @@ export interface DashboardInput {
 
 /** Kitten, die keine Aufmerksamkeit mehr brauchen. */
 function isGone(k: Kitten): boolean {
-  return k.stillborn || k.saleStatus === 'deceased';
+  return k.stillborn || k.saleStatus === 'deceased' || Boolean(k.diedAt);
 }
 
 /** „Wurf von Mira" — sonst über das Geburtsdatum, sonst schlicht „Wurf". */

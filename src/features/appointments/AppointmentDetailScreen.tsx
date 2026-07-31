@@ -270,9 +270,13 @@ export function AppointmentDetailScreen() {
   }
 
   /** Absage zurücknehmen — an zwei Stellen gebraucht, deshalb einmal hier. */
-  async function reviveAppointment(id: ID) {
+  async function reviveAppointment(appointment: Appointment) {
     try {
-      await patch(db.appointments, id, { cancelledAt: undefined });
+      await patch(db.appointments, appointment.id, { cancelledAt: undefined });
+      // Beim Absagen werden alte Zustellmerker entfernt. Liegt der Termin beim
+      // Zurücknehmen bereits in einem offenen Fenster, dieses sofort als
+      // gesehen markieren — sonst würde dieselbe Erinnerung erneut erscheinen.
+      await markFired(openReminderKeys(appointment, nowISO())).catch(() => {});
       toast.success('Der Termin gilt wieder.');
     } catch {
       toast.error('Die Absage konnte nicht zurückgenommen werden.');
@@ -282,7 +286,7 @@ export function AppointmentDetailScreen() {
   async function toggleCancelled() {
     if (!existing) return;
     if (existing.cancelledAt) {
-      await reviveAppointment(existing.id);
+      await reviveAppointment(existing);
       return;
     }
     try {
@@ -298,7 +302,7 @@ export function AppointmentDetailScreen() {
       action: {
         label: 'Rückgängig',
         onClick: () => {
-          void reviveAppointment(existing.id);
+          void reviveAppointment(existing);
         },
       },
     });

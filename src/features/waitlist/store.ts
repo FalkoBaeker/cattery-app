@@ -362,6 +362,10 @@ export async function clearBroadcastRun(): Promise<void> {
 export async function selectableKittens(currentKittenId?: ID): Promise<Kitten[]> {
   const all = await db.kittens.toArray();
   return all.filter(
-    (k) => !k.stillborn && (k.id === currentKittenId || k.saleStatus === 'available'),
+    (k) =>
+      !k.stillborn &&
+      !k.diedAt &&
+      k.saleStatus !== 'deceased' &&
+      (k.id === currentKittenId || k.saleStatus === 'available'),
   );
 }

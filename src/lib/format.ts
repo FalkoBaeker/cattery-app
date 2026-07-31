@@ -140,7 +140,13 @@ export function initials(name: string): string {
 
 /** Telefonnummer für wa.me: nur Ziffern, deutsche 0 -> 49. */
 export function toWhatsAppNumber(phone: string): string | null {
-  let digits = phone.replace(/[^\d+]/g, '');
+  // In internationaler Schreibweise bezeichnet „(0)" nur die inländische
+  // Amts-/Ortsnetzkennzahl und darf nicht mitgewählt werden: +49 (0)171 …
+  const withoutInternationalTrunk = phone.replace(
+    /^(\s*(?:\+|00)\s*\d{1,3})[\s./-]*\(\s*0\s*\)/,
+    '$1',
+  );
+  let digits = withoutInternationalTrunk.replace(/[^\d+]/g, '');
   if (!digits) return null;
   if (digits.startsWith('+')) digits = digits.slice(1);
   else if (digits.startsWith('00')) digits = digits.slice(2);

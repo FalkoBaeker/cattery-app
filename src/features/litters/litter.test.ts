@@ -315,6 +315,9 @@ describe('isLivingKitten', () => {
     expect(isLivingKitten({ stillborn: false, saleStatus: 'available' })).toBe(true);
     expect(isLivingKitten({ stillborn: true, saleStatus: 'available' })).toBe(false);
     expect(isLivingKitten({ stillborn: false, saleStatus: 'deceased' })).toBe(false);
+    expect(
+      isLivingKitten({ stillborn: false, saleStatus: 'available', diedAt: '2026-03-04' }),
+    ).toBe(false);
   });
 });
 
