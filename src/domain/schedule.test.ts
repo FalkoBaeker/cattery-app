@@ -150,6 +150,21 @@ describe('checkLitterPause', () => {
     expect(r.allowed).toBe(true);
   });
 
+  it('lässt einen Wurf am exakten 24-Monats-Jubiläum aus dem Fenster fallen', () => {
+    const dayBefore = checkLitterPause(['2024-03-01'], '2026-02-28', 1, 24);
+    expect(dayBefore.allowed).toBe(false);
+
+    const anniversary = checkLitterPause(['2024-03-01'], '2026-03-01', 1, 24);
+    expect(anniversary.allowed).toBe(true);
+    expect(anniversary.countInWindow).toBe(1);
+  });
+
+  it('berechnet Monatsenden als echte Kalendermonate', () => {
+    const r = checkLitterPause(['2026-01-31'], '2026-02-20', 1, 1);
+    expect(r.allowed).toBe(false);
+    expect(r.freeFrom).toBe('2026-02-28');
+  });
+
   it('ignoriert Würfe, die nach dem geplanten Datum liegen', () => {
     const r = checkLitterPause(['2027-01-01'], '2026-06-01', limit, months);
     expect(r.countInWindow).toBe(1);

@@ -28,6 +28,6 @@ export {
   Segmented,
   ChoiceGrid,
 } from './Field';
-export { Sheet, ConfirmProvider, useConfirm } from './Sheet';
+export { Sheet, ConfirmProvider, useConfirm, useFocusTrap } from './Sheet';
 export { ToastProvider, useToast } from './Toast';
 export { Screen, Stack } from './Screen';

@@ -21,18 +21,18 @@
   --color-border-strong: oklch(82% 0.008 250);
   --color-text: oklch(21% 0.012 250);
   --color-text-dim: oklch(48% 0.012 250);
-  --color-text-faint: oklch(63% 0.01 250);
+  --color-text-faint: oklch(52% 0.01 250);
 
   --color-accent: oklch(52% 0.09 245);
   --color-accent-hover: oklch(46% 0.095 245);
   --color-accent-soft: oklch(94% 0.022 245);
   --color-on-accent: oklch(100% 0 0);
 
-  --color-ok: oklch(52% 0.13 152);
+  --color-ok: oklch(50% 0.13 152);
   --color-ok-soft: oklch(94.5% 0.04 152);
-  --color-warn: oklch(62% 0.13 70);
+  --color-warn: oklch(52% 0.13 70);
   --color-warn-soft: oklch(95.5% 0.055 85);
-  --color-alert: oklch(55% 0.19 27);
+  --color-alert: oklch(52% 0.19 27);
   --color-alert-soft: oklch(95% 0.035 27);
 
   --radius-card: 0.875rem;
@@ -60,7 +60,7 @@
       --color-border-strong: oklch(40% 0.013 250);
       --color-text: oklch(95% 0.004 250);
       --color-text-dim: oklch(72% 0.01 250);
-      --color-text-faint: oklch(56% 0.011 250);
+      --color-text-faint: oklch(66% 0.011 250);
 
       --color-accent: oklch(70% 0.1 245);
       --color-accent-hover: oklch(76% 0.1 245);
@@ -91,7 +91,7 @@
     --color-border-strong: oklch(40% 0.013 250);
     --color-text: oklch(95% 0.004 250);
     --color-text-dim: oklch(72% 0.01 250);
-    --color-text-faint: oklch(56% 0.011 250);
+    --color-text-faint: oklch(66% 0.011 250);
 
     --color-accent: oklch(70% 0.1 245);
     --color-accent-hover: oklch(76% 0.1 245);

@@ -29,9 +29,8 @@ import {
   toLocalInputValue,
   todayISO,
 } from '../../lib/date';
-import { formatGainG, formatGrams } from '../../lib/format';
+import { formatGainG, formatGainPerDay, formatGrams } from '../../lib/format';
 import { dayOfLife, deltaToPrevious, parseGrams } from './weighing';
-import { sortSamples } from './chart';
 import { deleteWeight, updateWeight } from './store';
 
 export interface WeightHistoryProps {
@@ -53,15 +52,12 @@ export function WeightHistory({ kittenId, birthDate, limit, editable = true }: W
 
   const rows = useMemo(() => {
     if (!entries) return undefined;
+    // Stabil sortiert: bei exakt gleichem Zeitstempel entscheidet die
+    // Reihenfolge der Anlage — so hat auch die zweite Messung eine Vorgängerin.
     const ascending = [...entries].sort((a, b) => a.at.localeCompare(b.at));
-    const samples = sortSamples(ascending);
-    const withDelta = ascending.map((e) => ({
+    const withDelta = ascending.map((e, i) => ({
       entry: e,
-      delta: deltaToPrevious(
-        samples.filter((s) => s.at < e.at),
-        e.at,
-        e.grams,
-      ),
+      delta: deltaToPrevious(ascending.slice(0, i), e.at, e.grams),
     }));
     const newestFirst = withDelta.reverse();
     return limit ? newestFirst.slice(0, limit) : newestFirst;
@@ -92,7 +88,12 @@ export function WeightHistory({ kittenId, birthDate, limit, editable = true }: W
         {rows.map(({ entry, delta }) => {
           const day = dayOfLife(birthDate, dateOf(entry.at));
           const parts = [formatDateTime(entry.at)];
-          if (day != null) parts.push(`Tag ${day}`);
+          if (day != null) parts.push(day >= 0 ? `Tag ${day}` : 'vor der Geburt');
+          // Bei Lücken (F23) sagt der reine Unterschied wenig — erst die
+          // Hochrechnung auf den Tag macht ihn vergleichbar.
+          if (delta?.perDay != null && delta.hours >= 36) {
+            parts.push(`≈ ${formatGainPerDay(delta.perDay)}`);
+          }
           if (entry.note) parts.push(entry.note);
           return (
             <ListRow
@@ -218,7 +219,7 @@ export function EditWeightSheet({
       <div className="flex flex-col gap-4">
         {day != null && (
           <Badge tone="neutral">
-            Tag {day} · {formatDateTime(entry?.at)}
+            {day >= 0 ? `Tag ${day}` : 'Vor der Geburt'} · {formatDateTime(entry?.at)}
           </Badge>
         )}
         <NumberInput

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { useLiveQuery } from 'dexie-react-hooks';
 
 import {
@@ -20,7 +20,7 @@ import {
   useConfirm,
   useToast,
 } from '../../ui';
-import { db, getSettings, remove } from '../../db/db';
+import { db, getSettings } from '../../db/db';
 import { dateOf, formatDate, formatDeadline } from '../../lib/date';
 import type { BreedingUse, Contract, ContractType } from '../../types';
 import { BREEDING_USE_STAGE_LABEL, CONTRACT_TYPE_LABEL } from '../../types';
@@ -28,6 +28,7 @@ import { erinnerungsstufe } from './calc';
 import { istBeendet } from './breedingUse';
 import { dateiname, pdfOeffnen, teilenOderHerunterladen } from './pdf';
 import { tierNamen, verkaeuferdatenFehlen, vertragUntertitel } from './helpers';
+import { vertragMitPdfLoeschen } from './store';
 
 export function ContractsScreen() {
   const navigate = useNavigate();
@@ -66,16 +67,19 @@ export function ContractsScreen() {
     const ok = await confirm({
       title: 'Vertrag löschen?',
       message: vorgang
-        ? `Der Vertrag und das erzeugte PDF werden gelöscht. Der Zuchtnutzungs-Vorgang zu ${vorgang.catName} bleibt bestehen.`
+        ? `Der Vertrag und das erzeugte PDF werden gelöscht. Der Zuchtnutzungs-Vorgang zu ${vorgang.catName} bleibt mit seinem Verlauf bestehen.`
         : 'Der Vertrag und das erzeugte PDF werden gelöscht. Das lässt sich nicht rückgängig machen.',
       confirmLabel: 'Löschen',
       danger: true,
     });
     if (!ok) return;
-    if (vertrag.pdfAttachmentId) await db.attachments.delete(vertrag.pdfAttachmentId);
-    await remove(db.contracts, vertrag.id);
-    setAktion(null);
-    toast.success('Vertrag gelöscht');
+    try {
+      await vertragMitPdfLoeschen(vertrag);
+      setAktion(null);
+      toast.success('Vertrag gelöscht');
+    } catch {
+      toast.error('Der Vertrag konnte nicht gelöscht werden.');
+    }
   }
 
   function neuAnlegen(art: ContractType) {

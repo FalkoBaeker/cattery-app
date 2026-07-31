@@ -1,7 +1,7 @@
-import { beforeEach, describe, expect, it } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router';
 
 import { ConfirmProvider, ToastProvider } from '../../ui';
 import { db, updateSettings, wipeDatabase } from '../../db/db';
@@ -58,8 +58,8 @@ describe('Vertragseditor', () => {
     await waitFor(async () => {
       expect((await vorschau()).textContent).toContain('Anna Muster');
     });
-    // Auch die Anrede im Rechtstext steht schon drin.
-    expect((await vorschau()).textContent).toContain('nachfolgend der Käufer genannt');
+    // Auch die Anrede im Rechtstext steht schon drin (K1M-Form aus § 3).
+    expect((await vorschau()).textContent).toContain('gehen Besitz und Gefahr auf den Käufer über');
   });
 
   it('erklärt fehlende Verkäuferdaten und führt zu den Einstellungen', async () => {
@@ -74,9 +74,15 @@ describe('Vertragseditor', () => {
     zeichne('/mehr/vertraege/neu?art=standard');
 
     await nutzer.type(await screen.findByLabelText('Name'), 'Anna Muster');
-    await nutzer.click(screen.getByRole('button', { name: /Vertrag speichern/ }));
-
-    await waitFor(async () => expect(await db.contracts.count()).toBe(1));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Vertrag speichern/ }));
+      await vi.waitFor(async () => expect(await db.contracts.count()).toBe(1));
+    });
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Gespeichert' })).not.toHaveAttribute(
+        'aria-busy',
+      ),
+    );
     const vertrag = (await db.contracts.toArray())[0];
     expect(vertrag.type).toBe('standard');
     expect(vertrag.data.buyers[0].name).toBe('Anna Muster');
@@ -89,11 +95,14 @@ describe('Vertragseditor', () => {
 
     await nutzer.type(await screen.findByLabelText('Name'), 'Anna Muster');
     const knopf = screen.getByRole('button', { name: /Vertrag speichern|Gespeichert/ });
-    await nutzer.click(knopf);
-    await waitFor(async () => expect(await db.contracts.count()).toBe(1));
-    await nutzer.click(screen.getByRole('button', { name: /Vertrag speichern|Gespeichert/ }));
-
-    await waitFor(async () => expect(await db.contracts.count()).toBe(1));
+    await act(async () => {
+      fireEvent.click(knopf);
+      await vi.waitFor(async () => expect(await db.contracts.count()).toBe(1));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Vertrag speichern|Gespeichert/ }));
+      await vi.waitFor(async () => expect(await db.contracts.count()).toBe(1));
+    });
   });
 
   it('legt beim Zuchtnutzungsvertrag automatisch den Vorgang an', async () => {
@@ -101,9 +110,10 @@ describe('Vertragseditor', () => {
     zeichne('/mehr/vertraege/neu?art=zuchtnutzung');
 
     await nutzer.type(await screen.findByLabelText('Rufname'), 'Mia');
-    await nutzer.click(screen.getByRole('button', { name: /Vertrag speichern/ }));
-
-    await waitFor(async () => expect(await db.breedingUses.count()).toBe(1));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Vertrag speichern/ }));
+      await vi.waitFor(async () => expect(await db.breedingUses.count()).toBe(1));
+    });
     const vorgang = (await db.breedingUses.toArray())[0];
     expect(vorgang.catName).toBe('Mia');
     expect(vorgang.stage).toBe('at_buyer');
@@ -187,15 +197,38 @@ describe('Vertragseditor', () => {
     await waitFor(() => expect(screen.queryByText('Person 2')).not.toBeInTheDocument());
   });
 
-  it('warnt, wenn im Zuchtnutzungsvertrag ein Kater eingetragen wird', async () => {
+  it('lässt im Zuchtnutzungsvertrag nur weibliche Tiere und höchstens zwei zu', async () => {
     const nutzer = userEvent.setup();
     zeichne('/mehr/vertraege/neu?art=zuchtnutzung');
 
-    await nutzer.click(await screen.findByRole('radio', { name: 'Kater' }));
-    await waitFor(() =>
-      expect(
-        screen.getByText('Der Vertrag mit Zuchtvorbehalt gilt nur für weibliche Tiere.'),
-      ).toBeInTheDocument(),
-    );
+    expect(await screen.findByText('Katze (weiblich)')).toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: 'Kater' })).not.toBeInTheDocument();
+
+    const hinzufuegen = screen.getByRole('button', { name: 'Weiteres Tier' });
+    await nutzer.click(hinzufuegen);
+    expect(screen.getAllByText('Katze (weiblich)')).toHaveLength(2);
+    expect(hinzufuegen).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Aus Wurf' })).toBeDisabled();
+  });
+
+  it('legt die Vertragsart nach dem ersten Speichern fest', async () => {
+    const vertrag = await db.contracts.add({
+      id: 'c-fest',
+      type: 'breeding_reserved',
+      data: {
+        type: 'breeding_reserved',
+        buyers: [{ name: 'Anna Muster', sex: 'female' }],
+        animals: [{ name: 'Mia', sex: 'female' }],
+        breed: 'Russisch Blau',
+      },
+      createdAt: '2026-07-31T10:00:00Z',
+      updatedAt: '2026-07-31T10:00:00Z',
+    });
+
+    zeichne(`/mehr/vertraege/${vertrag}`);
+
+    expect(await screen.findByText('Nach dem ersten Speichern festgelegt')).toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: 'Kaufvertrag' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: 'Mit Zuchtvorbehalt' })).not.toBeInTheDocument();
   });
 });

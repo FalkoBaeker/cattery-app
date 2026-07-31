@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
   Badge,
@@ -35,13 +35,15 @@ import {
   formatRelativeDay,
   todayISO,
 } from '../../lib/date';
-import { formatGainG, formatGrams, formatPercent } from '../../lib/format';
-import { analyzeHeatCycles } from './heat';
+import { formatGainG, formatGrams } from '../../lib/format';
+import { analyzeHeatCycles, lastHeatSummary } from './heat';
+import { formatInbreeding } from './format';
 import { catAgeLabel } from './age';
 import {
   HEALTH_TEST_ICON,
   HEALTH_TEST_STATE_LABEL,
   healthTestTitle,
+  healthTestValidityLine,
   summarizeHealthTests,
   type HealthTestGroup,
 } from './tests';
@@ -52,6 +54,7 @@ import { HeatSheet } from './HeatSheet';
 import { HealthTestSheet } from './HealthTestSheet';
 import { CatWeightSheet } from './CatWeightSheet';
 import { WeightTrend } from './WeightTrend';
+import { useSettingsValues } from '../../db/useSettings';
 
 /* ------------------------------------------------------------------ */
 /*  Kleinteile                                                         */
@@ -65,6 +68,9 @@ const STATUS_TONE: Record<CatStatus, BadgeTone> = {
   deceased: 'neutral',
 };
 
+/* Bewusst eine lokale Kopie: src/ui/Card.tsx hält seine Tonfarben (TONES)
+   privat und exportiert sie nicht. Sobald src/ui sie veröffentlicht,
+   fliegt diese Tabelle raus. */
 const EVENT_TONE_CLASS: Record<EventTone, string> = {
   neutral: 'bg-surface-2 text-text-dim',
   accent: 'bg-accent-soft text-accent',
@@ -115,6 +121,7 @@ export function CatDetailScreen() {
   const { catId } = useParams<{ catId: string }>();
   const navigate = useNavigate();
   const today = todayISO();
+  const settings = useSettingsValues();
 
   const cat = useLiveQuery(
     async () => (catId ? ((await db.cats.get(catId)) ?? null) : null),
@@ -198,14 +205,27 @@ export function CatDetailScreen() {
       cat,
       heats,
       tests,
-      litters,
+      litters: settings.modules.litters ? litters : [],
       kittenCountByLitter: kittenCounts,
-      appointments,
-      weights,
+      appointments: settings.modules.appointments ? appointments : [],
+      weights: settings.modules.weights ? weights : [],
       careTasks,
       ref: today,
     });
-  }, [cat, heats, tests, litters, kittenCounts, appointments, weights, careTasks, today]);
+  }, [
+    cat,
+    heats,
+    tests,
+    litters,
+    kittenCounts,
+    appointments,
+    weights,
+    careTasks,
+    today,
+    settings.modules.litters,
+    settings.modules.appointments,
+    settings.modules.weights,
+  ]);
 
   /* --- Ladezustand und Fehlerfälle -------------------------------- */
 
@@ -246,9 +266,11 @@ export function CatDetailScreen() {
   }
 
   const isFemale = cat.sex === 'female';
+  // `cat.breed` zählt hier bewusst nicht mit: der Editor füllt die Rasse immer
+  // automatisch aus den Einstellungen — sie sagt nichts darüber, ob wirklich
+  // Stammdaten gepflegt wurden.
   const hasStammdaten = Boolean(
     cat.birthDate ||
-      cat.breed ||
       cat.emsCode ||
       cat.registrationNo ||
       cat.chipNo ||
@@ -316,14 +338,9 @@ export function CatDetailScreen() {
               <DataRow label="Chipnummer" value={cat.chipNo} />
               <DataRow label="Blutgruppe" value={cat.bloodGroup} />
               <DataRow label="Züchter" value={cat.breederName} />
-              <DataRow
-                label="Ahnenverlust"
-                value={
-                  cat.inbreedingPercent != null
-                    ? formatPercent(cat.inbreedingPercent / 100)
-                    : undefined
-                }
-              />
+              {/* PawPeds liefert zwei Nachkommastellen — formatPercent würde
+                  aus 6,25 ein falsches „6,3 %" machen. */}
+              <DataRow label="Ahnenverlust" value={formatInbreeding(cat.inbreedingPercent)} />
             </List>
           ) : (
             <Callout tone="neutral" icon="info" title="Nur der Rufname ist gefüllt">
@@ -349,6 +366,7 @@ export function CatDetailScreen() {
         {isFemale && (
           <Section
             title="Rolligkeit"
+            description={lastHeatSummary(heatAnalysis)}
             action={
               <Button icon="plus" onClick={() => setHeatSheet({ open: true })}>
                 Eintragen
@@ -411,6 +429,13 @@ export function CatDetailScreen() {
                     : `${healthSummary.expiredCount} Tests sind abgelaufen.`}
                 </Callout>
               )}
+              {healthSummary.dueSoonCount > 0 && (
+                <Callout tone="warn" icon="calendar" title="Bald fällig">
+                  {healthSummary.dueSoonCount === 1
+                    ? 'Ein Test wird in den nächsten Wochen fällig.'
+                    : `${healthSummary.dueSoonCount} Tests werden in den nächsten Wochen fällig.`}
+                </Callout>
+              )}
               <List>
                 {healthSummary.groups.map((g) => (
                   <HealthGroupRows
@@ -445,7 +470,7 @@ export function CatDetailScreen() {
         {/* ---------------------------------------------------------- */}
         {/*  Würfe                                                      */}
         {/* ---------------------------------------------------------- */}
-        <Section title="Würfe">
+        {settings.modules.litters && <Section title="Würfe">
           {litters === undefined ? (
             <SectionLoading />
           ) : litters.length === 0 ? (
@@ -485,12 +510,12 @@ export function CatDetailScreen() {
               })}
             </List>
           )}
-        </Section>
+        </Section>}
 
         {/* ---------------------------------------------------------- */}
         {/*  Gewicht (nur Königinnen)                                   */}
         {/* ---------------------------------------------------------- */}
-        {isFemale && (
+        {settings.modules.weights && isFemale && (
           <Section
             title="Gewicht"
             description="Während der Trächtigkeit. Nach der Geburt wird nicht mehr gewogen."
@@ -633,13 +658,13 @@ export function CatDetailScreen() {
         defaultKind={testSheet.kind}
         onClose={() => setTestSheet({ open: false })}
       />
-      <CatWeightSheet
+      {settings.modules.weights && <CatWeightSheet
         open={weightSheet.open}
         catId={cat.id}
         entryId={weightSheet.id}
         defaultGrams={weightSheet.id ? undefined : lastWeight?.grams}
         onClose={() => setWeightSheet({ open: false })}
-      />
+      />}
     </Screen>
   );
 }
@@ -808,13 +833,13 @@ function HealthGroupRows({
           </span>
         }
         title={group.title}
-        /* Das konkrete Fälligkeitsdatum gehört hierher — sonst muss man das
-           Bearbeiten-Blatt öffnen, um zu sehen, wann der nächste
+        /* Gültigkeit und konkretes Fälligkeitsdatum gehören hierher — sonst
+           muss man das Bearbeiten-Blatt öffnen, um zu sehen, wann der nächste
            Ultraschall ansteht. HCM und PKD laufen halbjährlich. */
         subtitle={[
           formatDate(latest.date),
           latest.result?.trim() || undefined,
-          status.nextDue ? `nächste Fälligkeit ${formatDate(status.nextDue)}` : undefined,
+          healthTestValidityLine(latest),
           status.text,
         ]
           .filter(Boolean)

@@ -77,6 +77,16 @@ describe('gramAxis', () => {
     }
   });
 
+  it('legt die Untergrenze eng an die Daten, statt ein leeres Drittel zu lassen', () => {
+    // Bei 92–268 g begann die Achse früher bei 50 g — das untere Drittel blieb leer.
+    const a = gramAxis(92, 268, 4);
+    expect(a.lo).toBe(90);
+    expect(a.lo).toBeLessThanOrEqual(92);
+    // Der Leerraum unterhalb der Daten bleibt kleiner als eine Schrittweite.
+    expect(92 - a.lo).toBeLessThan(a.step);
+    expect(a.hi).toBeGreaterThanOrEqual(268);
+  });
+
   it('öffnet den Bereich, wenn alle Werte gleich sind', () => {
     const a = gramAxis(120, 120);
     expect(a.hi).toBeGreaterThan(a.lo);

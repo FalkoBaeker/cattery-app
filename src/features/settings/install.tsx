@@ -6,6 +6,7 @@
  * Deshalb erklärt die App den Weg einmal freundlich — und danach nie wieder,
  * wenn sie einmal weggeklickt wurde.
  */
+/* eslint-disable react/only-export-components -- Erkennung, Hook und Anleitung bilden bewusst eine gemeinsame Installations-API. */
 
 import type { ReactNode } from 'react';
 import { useCallback, useEffect, useState } from 'react';

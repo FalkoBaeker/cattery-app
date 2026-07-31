@@ -138,9 +138,13 @@ export function QuickDocButton({
         defaults={defaults}
         startWithCamera
         onSaved={async (id) => {
-          // Nur zeigen, wenn wirklich eine Aufnahme dabei ist.
-          const saved = await db.documents.get(id);
-          if (saved && saved.pageIds.length > 0) setViewId(id);
+          try {
+            // Nur zeigen, wenn wirklich eine Aufnahme dabei ist.
+            const saved = await db.documents.get(id);
+            if (saved && saved.pageIds.length > 0) setViewId(id);
+          } catch {
+            // Gespeichert ist es — dann eben ohne Sprung in den Betrachter.
+          }
         }}
       />
     </>

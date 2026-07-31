@@ -12,7 +12,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 
 import { ConfirmProvider, ToastProvider } from '../../ui';
 import { db, wipeDatabase } from '../../db/db';

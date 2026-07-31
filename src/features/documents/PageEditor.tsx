@@ -83,6 +83,29 @@ export function PageEditor({ open, blob, onClose, onApply }: PageEditorProps) {
     };
   }, [open, blob]);
 
+  // Das Vorschau-Grundbild nicht über das Schließen hinaus festhalten —
+  // iOS rechnet Canvas-Flächen auf ein knappes Gesamtbudget an.
+  useEffect(() => {
+    if (open) return;
+    const base = baseRef.current;
+    if (base) {
+      base.width = 0;
+      base.height = 0;
+      baseRef.current = null;
+    }
+  }, [open]);
+
+  useEffect(() => {
+    return () => {
+      const base = baseRef.current;
+      if (base) {
+        base.width = 0;
+        base.height = 0;
+        baseRef.current = null;
+      }
+    };
+  }, []);
+
   /* --- Vorschau zeichnen --------------------------------------------- */
 
   const paint = useCallback(() => {
@@ -98,7 +121,9 @@ export function PageEditor({ open, blob, onClose, onApply }: PageEditorProps) {
   }, [tone]);
 
   // Grundbild (gedreht, ohne Farbanpassung) einmal je Drehung erzeugen,
-  // danach reicht ein Kopieren plus Farbtabelle — das bleibt beim Schieben flüssig.
+  // danach reicht ein Kopieren plus Farbtabelle — das bleibt beim Schieben
+  // flüssig. Deshalb hängt dieser Effekt bewusst NICHT an `paint` (und damit
+  // am Farbton): sonst würde jeder Reglertick das Grundbild neu zeichnen.
   useEffect(() => {
     const image = imageRef.current;
     if (loading || !image) return;
@@ -106,7 +131,15 @@ export function PageEditor({ open, blob, onClose, onApply }: PageEditorProps) {
     baseRef.current = base;
     drawTransformed(base, image, rotation, FULL_CROP, PREVIEW_EDGE);
     paint();
-  }, [loading, rotation, paint]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, rotation]);
+
+  // Farbänderungen kopieren nur das fertige Grundbild und wenden die
+  // Nachschlagetabelle an.
+  useEffect(() => {
+    if (loading) return;
+    paint();
+  }, [loading, paint]);
 
   /* --- Ecken ziehen --------------------------------------------------- */
 

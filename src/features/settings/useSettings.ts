@@ -7,36 +7,11 @@
  * die Seite neu geladen werden.
  */
 
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../../db/db';
-import { DEFAULT_SETTINGS, type Settings } from '../../types';
+import type { Settings } from '../../types';
 
-/** Ergänzt fehlende Zweige, damit ältere Datenstände nicht abstürzen. */
-export function mergeSettings(stored?: Settings | null): Settings {
-  if (!stored) return DEFAULT_SETTINGS;
-  return {
-    ...DEFAULT_SETTINGS,
-    ...stored,
-    seller: { ...DEFAULT_SETTINGS.seller, ...stored.seller },
-    weight: { ...DEFAULT_SETTINGS.weight, ...stored.weight },
-    schedule: { ...DEFAULT_SETTINGS.schedule, ...stored.schedule },
-    modules: { ...DEFAULT_SETTINGS.modules, ...stored.modules },
-    id: 'singleton',
-  };
-}
-
-/**
- * `undefined` bedeutet „wird noch geladen" — das ist etwas anderes als
- * „keine Einstellungen vorhanden" und darf nie als leer gezeichnet werden.
- */
-export function useSettings(): Settings | undefined {
-  const raw = useLiveQuery(
-    () => db.settings.get('singleton').then((s) => s ?? null),
-    [],
-  );
-  if (raw === undefined) return undefined;
-  return mergeSettings(raw);
-}
+// Die Live-Abfrage wohnt inzwischen zentral in src/db/useSettings.ts,
+// weil drei Module dieselbe Logik brauchten.
+export { mergeSettings, useSettings } from '../../db/useSettings';
 
 /** Setzt das Farbschema sofort auf das Wurzelelement (siehe src/App.tsx). */
 export function applyTheme(theme: Settings['theme']): void {

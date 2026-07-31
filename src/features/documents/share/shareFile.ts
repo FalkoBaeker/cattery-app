@@ -55,7 +55,9 @@ export async function shareOrDownload(
       await navigator.share({ files: [file], title, text });
       return 'shared';
     } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') return 'cancelled';
+      // DOMException erbt von Error; manche WebKit-Stände werfen aber auch
+      // schlichte Error-Objekte mit demselben Namen.
+      if (error instanceof Error && error.name === 'AbortError') return 'cancelled';
       // Alles andere: still auf den Download ausweichen.
     }
   }

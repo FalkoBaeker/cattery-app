@@ -387,6 +387,45 @@ export function baueVokabular(eingabe: VokabularEingabe): Vokabular {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Grammatik-Schalter der Vorlagen                                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Die Vorlagen benutzen die Schalter-Schreibweise der Textbausteine in
+ * docs/vertrag-a.txt und docs/vertrag-b.txt wortgleich:
+ *
+ *   [EZ:…|MZ:…]          Ein-/Mehrzahl der Tiere (Vertrag A)
+ *   [T1:…|TN:…]          eine Katze / mehrere Katzen (Vertrag B)
+ *   [K1M:…|K1W:…|KN:…]   ein Käufer / eine Käuferin / mehrere Käufer
+ *
+ * So bleibt der Rechtstext in den Vorlagen Zeichen für Zeichen mit den
+ * Textbausteinen vergleichbar — geprüft in vorlagen.test.ts.
+ */
+export interface SchalterLage {
+  tierNumerus: Numerus;
+  kaeuferForm: KaeuferForm;
+}
+
+const SCHALTER_TIER = /\[(?:EZ|T1):([^|\]]*)\|(?:MZ|TN):([^\]]*)\]/g;
+const SCHALTER_KAEUFER = /\[K1M:([^|\]]*)\|K1W:([^|\]]*)\|KN:([^\]]*)\]/g;
+
+/** Löst die Schalter auf; Platzhalter im Inneren bleiben stehen. */
+export function loeseSchalter(text: string, lage: SchalterLage): string {
+  return text
+    .replace(SCHALTER_TIER, (_, ez: string, mz: string) =>
+      lage.tierNumerus === 'pl' ? mz : ez,
+    )
+    .replace(SCHALTER_KAEUFER, (_, m: string, w: string, pl: string) =>
+      lage.kaeuferForm === 'pl' ? pl : lage.kaeuferForm === 'f' ? w : m,
+    );
+}
+
+/** Findet Schalter, die nach dem Auflösen übrig geblieben sind. */
+export function offeneSchalter(text: string): string[] {
+  return [...text.matchAll(/\[(?:EZ|T1|K1M):[^\]]*\]?/g)].map((t) => t[0]);
+}
+
+/* ------------------------------------------------------------------ */
 /*  Platzhalter auflösen                                               */
 /* ------------------------------------------------------------------ */
 

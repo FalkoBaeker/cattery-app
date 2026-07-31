@@ -100,8 +100,12 @@ export function gramAxis(min: number, max: number, targetTicks = 4): AxisScale {
   }
 
   const step = pickStep(hi - lo, targetTicks, GRAM_STEPS);
-  const start = Math.floor(lo / step) * step;
-  let end = Math.ceil(hi / step) * step;
+  // Untergrenze auf einem feineren Raster abrunden: bei 92–268 g soll die
+  // Achse bei 90 g beginnen, nicht bei 50 g — sonst bleibt das untere
+  // Drittel der Kurve leer.
+  const fine = Math.max(1, Math.round(step / 5));
+  const start = Math.floor(lo / fine) * fine;
+  let end = start + Math.ceil((hi - start) / step) * step;
   if (end <= start) end = start + step;
   const count = Math.max(1, Math.round((end - start) / step));
 

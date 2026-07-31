@@ -3,6 +3,7 @@ import {
   MIN_CYCLES_FOR_PREDICTION,
   analyzeHeatCycles,
   isValidISODate,
+  lastHeatSummary,
   normalizeHeatCycles,
 } from './heat';
 
@@ -283,5 +284,33 @@ describe('analyzeHeatCycles', () => {
     );
     expect(a.count).toBe(1);
     expect(a.ignoredCount).toBe(1);
+  });
+});
+
+describe('lastHeatSummary', () => {
+  const analyze = (entries: Parameters<typeof analyzeHeatCycles>[0], ref: string) =>
+    lastHeatSummary(analyzeHeatCycles(entries, ref));
+
+  it('nennt Abstand und Datum der letzten Rolligkeit', () => {
+    expect(analyze([{ startDate: '2026-03-12' }], '2026-03-30')).toBe(
+      'Letzte Rolligkeit vor 18 Tagen (12.03.2026).',
+    );
+  });
+
+  it('kennt den Sonderfall „heute" und den Singular', () => {
+    expect(analyze([{ startDate: '2026-03-30' }], '2026-03-30')).toBe(
+      'Letzte Rolligkeit: heute begonnen (30.03.2026).',
+    );
+    expect(analyze([{ startDate: '2026-03-29' }], '2026-03-30')).toBe(
+      'Letzte Rolligkeit vor 1 Tag (29.03.2026).',
+    );
+  });
+
+  it('meldet ein Zukunftsdatum ehrlich', () => {
+    expect(analyze([{ startDate: '2026-04-05' }], '2026-03-30')).toContain('liegt in der Zukunft');
+  });
+
+  it('schweigt ohne erfasste Rolligkeit', () => {
+    expect(analyze([], '2026-03-30')).toBeUndefined();
   });
 });

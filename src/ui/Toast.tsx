@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from 'react';
+/* eslint-disable react/only-export-components -- Provider und zugehöriger Zugriffshook gehören zu derselben UI-API. */
 import { createPortal } from 'react-dom';
 import { Icon, type IconName } from './Icon';
 import { newId } from '../lib/id';

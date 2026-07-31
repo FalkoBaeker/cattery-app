@@ -8,11 +8,10 @@
  */
 
 import { formatDate } from '../../lib/date';
-import { formatMoney } from '../../lib/format';
+import { formatMoney, joinAnd, numberWord } from '../../lib/format';
 import type { ContractData, ISODate, SellerSettings } from '../../types';
 import {
   ermaessigterPreisCents,
-  fristende,
   hatAnzahlung,
   restsummeCents,
   verwendungszweck,
@@ -22,7 +21,16 @@ import {
   VORGABE_NUTZUNGSMONATE,
   VORGABE_VERLAENGERUNGSMONATE,
 } from './calc';
-import { baueVokabular, fuellePlatzhalter, LUECKE, offenePlatzhalter, type Vokabular } from './grammar';
+import {
+  baueVokabular,
+  fuellePlatzhalter,
+  grammatikBefund,
+  loeseSchalter,
+  LUECKE,
+  offenePlatzhalter,
+  type SchalterLage,
+  type Vokabular,
+} from './grammar';
 import type { Absatz, Bedingung, Vertragsvorlage } from './templates/model';
 import { VERTRAG_STANDARD } from './templates/standard';
 import { VERTRAG_ZUCHTNUTZUNG } from './templates/breeding';
@@ -114,44 +122,84 @@ export function gemeinsamesGeburtsdatum(data: ContractData): string {
   return formatDate(daten[0]);
 }
 
-export function werte(data: ContractData, seller: SellerSettings): Vokabular {
-  const nutzungsmonate = data.breedingUseMonths ?? VORGABE_NUTZUNGSMONATE;
-  const start = data.breedingUseStartDate;
+/** Vertrag A, § 1: „Chipnummer: … (Name)" — eine Zeile je Kitten. */
+export function tiereListe(data: ContractData): string {
+  const tiere = data.animals.length ? data.animals : [{} as ContractData['animals'][number]];
+  return tiere
+    .map((t) => `Chipnummer: ${oderLuecke(t.chipNo)} (${oderLuecke(t.name)})`)
+    .join('\n');
+}
 
+/** Vertrag B, § 1: der Datenblock je Katze, wie in der Textvorlage. */
+export function katzenListe(data: ContractData): string {
+  const tiere = data.animals.length ? data.animals : [{} as ContractData['animals'][number]];
+  return tiere
+    .map((t) =>
+      [
+        `Name: ${oderLuecke(t.name)}`,
+        `Rasse: ${oderLuecke(data.breed)}`,
+        'Geschlecht: weiblich',
+        `Geburtsdatum: ${datumOderLuecke(t.birthDate)}`,
+        `Chipnummer: ${oderLuecke(t.chipNo)}`,
+      ].join('\n'),
+    )
+    .join('\n\n');
+}
+
+/** Mehrere Angaben zu einer: "A und B" bzw. "A, B und C". */
+function verbunden(teile: (string | undefined)[]): string {
+  // Doppelte Angaben (z. B. dieselbe Anschrift zweier Käufer) nur einmal.
+  const liste = [...new Set(teile.map((t) => t?.trim()).filter(Boolean))] as string[];
+  return liste.length ? joinAnd(liste) : LUECKE;
+}
+
+/**
+ * Die Platzhalter tragen dieselben Namen wie in den Textvorlagen
+ * docs/vertrag-a.txt und docs/vertrag-b.txt (dort mit doppelten
+ * geschweiften Klammern geschrieben).
+ */
+export function werte(data: ContractData, seller: SellerSettings): Vokabular {
   return {
     'vk.name': oderLuecke(seller.name),
     'vk.anschrift': oderLuecke(seller.address),
-    'vk.geburtsdatum': datumOderLuecke(seller.birthDate),
+    'vk.gebDatum': datumOderLuecke(seller.birthDate),
     'vk.iban': oderLuecke(seller.iban),
-    'vk.zwinger': oderLuecke(seller.catteryName),
+
+    'kaeufer.name': verbunden(data.buyers.map((b) => b.name)),
+    'kaeufer.anschrift': verbunden(data.buyers.map((b) => b.address)),
+    'kaeufer.gebDatum': verbunden(
+      data.buyers.map((b) => (b.birthDate ? formatDate(b.birthDate) : undefined)),
+    ),
 
     rasse: oderLuecke(data.breed),
     verein: oderLuecke(seller.clubName),
-    geburtsdatum: gemeinsamesGeburtsdatum(data),
+    tierzahlWort: numberWord(Math.max(1, data.animals.length)),
+    gebDatum: gemeinsamesGeburtsdatum(data),
 
-    /* Standardvertrag */
+    /* Vertrag A */
+    'tiere.liste': tiereListe(data),
     preis: geldOderLuecke(data.totalPriceCents),
     anzahlung: geldOderLuecke(data.depositCents),
     restsumme: geldOderLuecke(restsummeCents(data.totalPriceCents, data.depositCents)),
-    uebergabe: oderLuecke(data.handoverText),
-    uebergabeort: oderLuecke(data.handoverPlace || seller.place),
+    uebergabeTermin: oderLuecke(data.handoverText),
+    uebergabeOrt: oderLuecke(data.handoverPlace || seller.place),
 
-    /* Zuchtnutzungsvertrag */
-    regulaerpreis: geldOderLuecke(data.regularPriceCents),
+    /* Vertrag B */
+    'katzen.liste': katzenListe(data),
+    'katzen.0.name': oderLuecke(data.animals[0]?.name),
+    preisRegulaer: geldOderLuecke(data.regularPriceCents),
     nachlass: geldOderLuecke(data.discountCents),
     ermaessigt: geldOderLuecke(
       ermaessigterPreisCents(data.regularPriceCents, data.discountCents),
     ),
     verwendungszweck: verwendungszweck(data.animals, data.buyers),
-    nutzungsmonate: String(nutzungsmonate),
-    verlaengerungsmonate: String(
+    fristMonate: String(data.breedingUseMonths ?? VORGABE_NUTZUNGSMONATE),
+    verlaengerungMonate: String(
       data.breedingUseExtensionMonths ?? VORGABE_VERLAENGERUNGSMONATE,
     ),
-    herausgabetage: String(data.handoverDeadlineDays ?? VORGABE_HERAUSGABETAGE),
+    herausgabeTage: String(data.handoverDeadlineDays ?? VORGABE_HERAUSGABETAGE),
     deckversuche: String(data.matingAttempts ?? VORGABE_DECKVERSUCHE),
-    nachzahlungstage: String(data.backPaymentDays ?? VORGABE_NACHZAHLUNGSTAGE),
-    fristbeginn: datumOderLuecke(start),
-    fristende: start ? formatDate(fristende(start, nutzungsmonate)) : LUECKE,
+    nachzahlungTage: String(data.backPaymentDays ?? VORGABE_NACHZAHLUNGSTAGE),
 
     /* Beide */
     zusatz: data.additionalAgreement?.trim() ?? '',
@@ -196,7 +244,7 @@ function hinweise(data: ContractData, seller: SellerSettings): string[] {
     h.push('In den Einstellungen fehlen Name oder Anschrift der Verkäuferin.');
   }
   if (!seller.iban?.trim()) {
-    h.push('Ohne IBAN in den Einstellungen wird kein Konto im Vertrag gedruckt.');
+    h.push('Die IBAN fehlt in den Einstellungen — im Vertrag bleibt dort eine Lücke.');
   }
   if (data.buyers.length === 0) h.push('Es ist noch kein Käufer eingetragen.');
   if (data.animals.length === 0) h.push('Es ist noch kein Tier eingetragen.');
@@ -232,14 +280,24 @@ export interface RenderEingabe {
 export function rendereVertrag({ data, seller }: RenderEingabe): GesetzterVertrag {
   const vorlage = vorlageFuer(data);
   const aktiv = bedingungen(data, seller);
+  const befund = grammatikBefund({ animals: data.animals, buyers: data.buyers });
+  const lage: SchalterLage = {
+    tierNumerus: befund.tierNumerus,
+    kaeuferForm: befund.kaeuferForm,
+  };
   const vokabular = baueVokabular({
     animals: data.animals,
     buyers: data.buyers,
     werte: werte(data, seller),
   });
 
+  // Erst die Grammatik-Schalter, dann die Platzhalter — die Schalter
+  // dürfen Platzhalter enthalten ("[T1:eine {rasse}-Katze|TN:…]").
+  const fuelle = (text: string): string =>
+    fuellePlatzhalter(loeseSchalter(text, lage), vokabular).trim();
+
   const setze = (a: Absatz): GesetzterAbsatz => ({
-    text: fuellePlatzhalter(a.text, vokabular).trim(),
+    text: fuelle(a.text),
     block: Boolean(a.block),
   });
 
@@ -257,13 +315,13 @@ export function rendereVertrag({ data, seller }: RenderEingabe): GesetzterVertra
     nummer += 1;
     paragrafen.push({
       nummer,
-      ueberschrift: `§ ${nummer} ${p.titel}`,
+      ueberschrift: `§ ${nummer} ${fuelle(p.titel)}`,
       absaetze,
     });
   }
 
   return {
-    titel: vorlage.titel,
+    titel: fuelle(vorlage.titel),
     vorspann: nurSichtbare(vorlage.vorspann),
     paragrafen,
     nachspann: nurSichtbare(vorlage.nachspann),
@@ -308,8 +366,9 @@ export function unaufgeloestePlatzhalter({ data, seller }: RenderEingabe): strin
     werte: werte(data, seller),
   });
   const alleTexte = [
+    vorlage.titel,
     ...vorlage.vorspann.map((a) => a.text),
-    ...vorlage.paragrafen.flatMap((p) => p.absaetze.map((a) => a.text)),
+    ...vorlage.paragrafen.flatMap((p) => [p.titel, ...p.absaetze.map((a) => a.text)]),
     ...vorlage.nachspann.map((a) => a.text),
   ];
   const offen = alleTexte.flatMap((t) => offenePlatzhalter(t, vokabular));

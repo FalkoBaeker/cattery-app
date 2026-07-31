@@ -8,6 +8,7 @@ import {
   neuerEntwurf,
   tierNamen,
   verkaeuferdatenFehlen,
+  vertragsregelnAnwenden,
   vertragUntertitel,
 } from './helpers';
 
@@ -145,6 +146,14 @@ describe('Neuer Entwurf', () => {
     expect(e.animals[0].name).toBe('Rot');
   });
 
+  it('übernimmt einen Kater nicht in einen Zuchtnutzungsvertrag', () => {
+    const e = neuerEntwurf('breeding_reserved', EINSTELLUNGEN, {
+      kitten: { ...KITTEN, sex: 'male', callName: 'Leo' },
+      litter: WURF,
+    });
+    expect(e.animals).toEqual([{ name: '', sex: 'female' }]);
+  });
+
   it('übernimmt den Interessenten als Käufer', () => {
     const e = neuerEntwurf('standard', EINSTELLUNGEN, { interest: INTERESSENT });
     expect(e.buyers[0].name).toBe('Anna Muster');
@@ -201,5 +210,22 @@ describe('Vertragsart wechseln', () => {
     const standard = artWechseln(zucht, 'standard', EINSTELLUNGEN);
     const wiederZucht = artWechseln(standard, 'breeding_reserved', EINSTELLUNGEN);
     expect(wiederZucht.breedingUseMonths).toBe(24);
+  });
+
+  it('entfernt Kater und begrenzt Vertrag B auf zwei Katzen', () => {
+    const data: ContractData = {
+      ...neuerEntwurf('breeding_reserved', EINSTELLUNGEN),
+      animals: [
+        { name: 'Mia', sex: 'female' },
+        { name: 'Leo', sex: 'male' },
+        { name: 'Nala', sex: 'female' },
+        { name: 'Luna', sex: 'female' },
+      ],
+    };
+
+    expect(vertragsregelnAnwenden(data).animals).toEqual([
+      { name: 'Mia', sex: 'female' },
+      { name: 'Nala', sex: 'female' },
+    ]);
   });
 });

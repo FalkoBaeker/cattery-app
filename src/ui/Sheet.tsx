@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+/* eslint-disable react/only-export-components -- Bestätigungs-Provider und Zugriffshook werden als gemeinsame UI-API exportiert. */
 import { createPortal } from 'react-dom';
 import { Button, IconButton } from './Button';
 
@@ -44,7 +45,7 @@ function useScrollLock(active: boolean) {
 }
 
 /** Hält den Tastaturfokus innerhalb des Blattes. */
-function useFocusTrap(ref: React.RefObject<HTMLElement | null>, active: boolean) {
+export function useFocusTrap(ref: React.RefObject<HTMLElement | null>, active: boolean) {
   useEffect(() => {
     if (!active || !ref.current) return;
     const node = ref.current;

@@ -7,8 +7,8 @@
 import { Badge, Button, Card, Icon } from '../../ui';
 import type { CareTask, Litter, Settings } from '../../types';
 import { dueState } from '../../domain/schedule';
-import { ageInWeeks, formatAge, formatDate, formatRelativeDay } from '../../lib/date';
-import { countdownLabel, pregnancyInfo, summaryLine, weighingLine, type LitterSummary } from './litter';
+import { formatAge, formatDate, formatRelativeDay } from '../../lib/date';
+import { countdownLabel, pregnancyInfo, summaryLine, weighingStatus, type LitterSummary } from './litter';
 import { LitterStatusBadge } from './parts';
 
 function parentLine(motherName: string, fatherName?: string): string {
@@ -23,6 +23,7 @@ export function RunningLitterCard({
   warnings,
   nextTask,
   settings,
+  showWeights = true,
   onOpen,
   onWeigh,
 }: {
@@ -33,13 +34,15 @@ export function RunningLitterCard({
   warnings: number;
   nextTask?: CareTask;
   settings: Settings;
+  showWeights?: boolean;
   onOpen: () => void;
-  onWeigh: () => void;
+  onWeigh?: () => void;
 }) {
   const nextState = nextTask ? dueState(nextTask, settings.schedule) : undefined;
-  // Ab Woche 5 wird nicht mehr routinemäßig gewogen (F10) — dann ist ein
-  // „heute noch nicht gewogen" keine Mahnung mehr, sondern nur Lärm.
-  const inWeighingPhase = litter.birthDate ? ageInWeeks(litter.birthDate) < 5 : false;
+  // Ab Woche 5 wird nicht mehr routinemäßig gewogen (F10) — dann steht hier
+  // ein neutraler Hinweis statt einer Mahnung. Wortloses Verschwinden liest
+  // sich sonst wie ein Fehler.
+  const weighing = weighingStatus(summary, litter.birthDate);
 
   return (
     <Card padded={false}>
@@ -68,17 +71,15 @@ export function RunningLitterCard({
         <span className="text-[0.9rem] text-text">{summaryLine(summary)}</span>
 
         <div className="flex flex-wrap items-center gap-1.5">
-          {inWeighingPhase && (
-            <Badge
-              tone={summary.allWeighedToday ? 'ok' : summary.toWeigh > 0 ? 'warn' : 'neutral'}
-              icon="scale"
-            >
-              {weighingLine(summary)}
+          {showWeights && weighing && (
+            <Badge tone={weighing.tone} icon="scale">
+              {weighing.text}
             </Badge>
           )}
-          {warnings > 0 && (
+          {showWeights && warnings > 0 && (
             <Badge tone="alert" icon="alert">
-              {warnings} {warnings === 1 ? 'Kitten auffällig' : 'Kitten auffällig'}
+              {/* „Kitten" hat keine eigene Mehrzahlform. */}
+              {warnings} Kitten auffällig
             </Badge>
           )}
         </div>
@@ -100,10 +101,17 @@ export function RunningLitterCard({
         )}
       </button>
 
-      <div className="grid grid-cols-2 gap-2 border-t border-border p-3">
-        <Button icon="scale" onClick={onWeigh}>
-          Wiegen
-        </Button>
+      <div
+        className={[
+          'grid gap-2 border-t border-border p-3',
+          showWeights && onWeigh ? 'grid-cols-2' : 'grid-cols-1',
+        ].join(' ')}
+      >
+        {showWeights && onWeigh && (
+          <Button icon="scale" onClick={onWeigh}>
+            Wiegen
+          </Button>
+        )}
         <Button variant="primary" iconRight="chevron-right" onClick={onOpen}>
           Wurf öffnen
         </Button>

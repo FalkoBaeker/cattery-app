@@ -3,7 +3,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
   Badge,
@@ -42,6 +42,7 @@ import {
   type ChartSeriesInput,
   type WeightSample,
 } from '../weights';
+import { ShareImageButton } from '../documents';
 import {
   ageInDays,
   dateOf,
@@ -190,6 +191,7 @@ export function KittenDetailScreen() {
   }
 
   const { kitten, litter, siblings, weights, tasks, events, interests, appointments } = data;
+  const showWeights = settings.modules.weights;
   const collar = collarColor(kitten.collarColor);
   const interest = interests.find((i) => i.id === kitten.interestId);
   const level = analysis?.level ?? 'unknown';
@@ -224,14 +226,16 @@ export function KittenDetailScreen() {
     });
   }
 
-  for (const d of weightDays) {
-    timeline.push({
-      key: `w-${d.date}`,
-      date: d.date,
-      icon: 'scale',
-      title: formatGrams(d.grams),
-      detail: d.count > 1 ? `${d.count} Wiegungen an diesem Tag` : undefined,
-    });
+  if (showWeights) {
+    for (const d of weightDays) {
+      timeline.push({
+        key: `w-${d.date}`,
+        date: d.date,
+        icon: 'scale',
+        title: formatGrams(d.grams),
+        detail: d.count > 1 ? `${d.count} Wiegungen an diesem Tag` : undefined,
+      });
+    }
   }
 
   for (const t of tasks) {
@@ -245,14 +249,16 @@ export function KittenDetailScreen() {
     });
   }
 
-  for (const a of appointments) {
-    timeline.push({
-      key: `a-${a.id}`,
-      date: dateOf(a.startAt),
-      icon: 'calendar',
-      title: a.title || APPOINTMENT_KIND_LABEL[a.kind],
-      detail: formatDateTime(a.startAt),
-    });
+  if (settings.modules.appointments) {
+    for (const a of appointments) {
+      timeline.push({
+        key: `a-${a.id}`,
+        date: dateOf(a.startAt),
+        icon: 'calendar',
+        title: a.title || APPOINTMENT_KIND_LABEL[a.kind],
+        detail: formatDateTime(a.startAt),
+      });
+    }
   }
 
   for (const e of events) {
@@ -352,29 +358,35 @@ export function KittenDetailScreen() {
               value={litter?.birthDate ? formatAge(litter.birthDate) : '—'}
             />
             <DataRow label="Geburtsgewicht" value={formatGrams(kitten.birthWeightG)} />
-            <DataRow
-              label="Aktuelles Gewicht"
-              value={
-                latest ? (
-                  <span className="flex items-center justify-end gap-2">
-                    {formatGrams(latest.grams)}
-                    {level !== 'unknown' && (
-                      <Badge tone={WEIGHT_LEVEL_TONE[level]}>{WEIGHT_LEVEL_LABEL[level]}</Badge>
-                    )}
-                  </span>
-                ) : (
-                  'noch nicht gewogen'
-                )
-              }
-            />
-            {analysis?.gainPerDay != null && (
-              <DataRow label="Zunahme" value={formatGainPerDay(analysis.gainPerDay)} />
-            )}
-            {analysis?.gainSinceBirthRatio != null && (
-              <DataRow
-                label="Seit Geburt"
-                value={formatPercent(analysis.gainSinceBirthRatio, true)}
-              />
+            {showWeights && (
+              <>
+                <DataRow
+                  label="Aktuelles Gewicht"
+                  value={
+                    latest ? (
+                      <span className="flex items-center justify-end gap-2">
+                        {formatGrams(latest.grams)}
+                        {level !== 'unknown' && (
+                          <Badge tone={WEIGHT_LEVEL_TONE[level]}>
+                            {WEIGHT_LEVEL_LABEL[level]}
+                          </Badge>
+                        )}
+                      </span>
+                    ) : (
+                      'noch nicht gewogen'
+                    )
+                  }
+                />
+                {analysis?.gainPerDay != null && (
+                  <DataRow label="Zunahme" value={formatGainPerDay(analysis.gainPerDay)} />
+                )}
+                {analysis?.gainSinceBirthRatio != null && (
+                  <DataRow
+                    label="Seit Geburt"
+                    value={formatPercent(analysis.gainSinceBirthRatio, true)}
+                  />
+                )}
+              </>
             )}
           </div>
         </Card>
@@ -385,7 +397,11 @@ export function KittenDetailScreen() {
           </Callout>
         )}
 
-        {analysis && analysis.reasons.length > 0 && level !== 'ok' && level !== 'unknown' && (
+        {showWeights &&
+          analysis &&
+          analysis.reasons.length > 0 &&
+          level !== 'ok' &&
+          level !== 'unknown' && (
           <Callout tone={WEIGHT_LEVEL_TONE[level]} icon="alert" title={WEIGHT_LEVEL_LABEL[level]}>
             <ul className="list-disc pl-4">
               {analysis.reasons.map((r) => (
@@ -421,14 +437,30 @@ export function KittenDetailScreen() {
               title="Interessent"
               subtitle={interest ? interest.name : 'noch keiner verknüpft'}
               onClick={() =>
-                interest ? navigate(`/warteliste/${interest.id}`) : setEditSheet(true)
+                interest && settings.modules.waitlist
+                  ? navigate(`/warteliste/${interest.id}`)
+                  : setEditSheet(true)
               }
             />
           </List>
         </Section>
 
+        {/* --- Persönliches Kunden-Update --------------------------- */}
+        {!kitten.stillborn && kitten.saleStatus !== 'deceased' && (
+          <Section
+            title="Kunden-Update"
+            description={
+              interest
+                ? `Fertiges Bild für ${interest.name} — Foto, Gewicht und Kurve werden automatisch eingesetzt.`
+                : 'Fertiges Bild für WhatsApp — die persönliche Anrede lässt sich vor dem Teilen ergänzen.'
+            }
+          >
+            <ShareImageButton kittenId={kitten.id} block />
+          </Section>
+        )}
+
         {/* --- Gewicht ------------------------------------------------ */}
-        <Section
+        {showWeights && <Section
           title="Gewicht"
           action={
             litter && (
@@ -481,7 +513,7 @@ export function KittenDetailScreen() {
               )}
             </Card>
           )}
-        </Section>
+        </Section>}
 
         {/* --- Zeitstrahl --------------------------------------------- */}
         <Section title="Zeitstrahl" description="Alles zu diesem Kitten, neueste Einträge zuerst">
@@ -559,17 +591,17 @@ export function KittenDetailScreen() {
       </Stack>
 
       {/* --- Blätter -------------------------------------------------- */}
-      {litter && (
-        <KittenEditorSheet
-          open={editSheet}
-          onClose={() => setEditSheet(false)}
-          litter={litter}
-          kitten={kitten}
-          siblings={siblings}
-          interests={interests}
-          settings={settings}
-        />
-      )}
+      {/* Auch ohne Wurf (etwa nach dessen Löschung) bleibt das Kitten
+          bearbeitbar — der Stift darf nie ins Leere zeigen. */}
+      <KittenEditorSheet
+        open={editSheet}
+        onClose={() => setEditSheet(false)}
+        litter={litter}
+        kitten={kitten}
+        siblings={siblings}
+        interests={interests}
+        settings={settings}
+      />
 
       <Sheet open={saleSheet} onClose={() => setSaleSheet(false)} title="Verkaufsstatus">
         <div className="flex flex-col gap-4">

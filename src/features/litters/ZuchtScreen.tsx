@@ -3,7 +3,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
   Badge,
@@ -18,13 +18,14 @@ import {
   Sheet,
   Stack,
 } from '../../ui';
-import { CAT_STATUS_LABEL } from '../../types';
 import type { Cat, ID, Litter } from '../../types';
 import { db } from '../../db/db';
 import { formatDate } from '../../lib/date';
+import { CatEditorSheet, CatRow } from '../cats';
 import {
   analyzeLitterWeights,
   countWeightWarnings,
+  effectiveDueDate,
   nextOpenTask,
   summarizeLitter,
 } from './litter';
@@ -32,7 +33,6 @@ import { useSettings } from './hooks';
 import { Loading } from './parts';
 import { PlannedLitterCard, RunningLitterCard } from './LitterCard';
 import { LitterEditorSheet } from './LitterEditorSheet';
-import { CatQuickSheet } from './CatQuickSheet';
 
 const RUNNING: Litter['status'][] = ['born'];
 const EXPECTED: Litter['status'][] = ['planned', 'mated', 'pregnant'];
@@ -95,13 +95,16 @@ export function ZuchtScreen() {
       });
   }, [data, settings]);
 
-  const expected = useMemo(
-    () =>
-      (data?.litters ?? [])
-        .filter((l) => EXPECTED.includes(l.status))
-        .sort((a, b) => (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999')),
-    [data?.litters],
-  );
+  // Zum Sortieren zählt auch der aus dem Deckdatum errechnete Termin —
+  // sonst rutscht ein Wurf mit Deckdatum, aber ohne gespeicherten Termin
+  // ans Ende, obwohl sein Termin längst feststeht.
+  const expected = useMemo(() => {
+    const gestationDays = settings?.gestationDays;
+    const key = (l: Litter) => effectiveDueDate(l, gestationDays) ?? '9999';
+    return (data?.litters ?? [])
+      .filter((l) => EXPECTED.includes(l.status))
+      .sort((a, b) => key(a).localeCompare(key(b)));
+  }, [data?.litters, settings?.gestationDays]);
 
   const closed = useMemo(
     () =>
@@ -126,7 +129,18 @@ export function ZuchtScreen() {
     [data?.cats],
   );
   const externalStuds = useMemo(
-    () => (data?.cats ?? []).filter((c) => !c.isOwn),
+    () =>
+      (data?.cats ?? [])
+        .filter((c) => c.sex === 'male' && !c.isOwn)
+        .sort((a, b) => a.callName.localeCompare(b.callName)),
+    [data?.cats],
+  );
+  /** Fremde weibliche Tiere — selten, aber möglich; gehören nicht zu den Deckkatern. */
+  const externalQueens = useMemo(
+    () =>
+      (data?.cats ?? [])
+        .filter((c) => c.sex === 'female' && !c.isOwn)
+        .sort((a, b) => a.callName.localeCompare(b.callName)),
     [data?.cats],
   );
 
@@ -138,7 +152,11 @@ export function ZuchtScreen() {
     );
   }
 
-  const nothingAtAll = data.litters.length === 0 && data.cats.length === 0;
+  const showCats = settings.modules.cats;
+  const showLitters = settings.modules.litters;
+  const showWeights = settings.modules.weights && showLitters;
+  const nothingAtAll =
+    (!showLitters || data.litters.length === 0) && (!showCats || data.cats.length === 0);
 
   function nameOf(id?: ID): string | undefined {
     if (!id) return undefined;
@@ -155,22 +173,36 @@ export function ZuchtScreen() {
         <EmptyState
           icon="cat"
           title="Hier beginnt alles"
-          description="Lege zuerst deine Zuchttiere an. Danach entsteht mit dem ersten Wurf der komplette Fahrplan von selbst."
+          description={
+            showCats && showLitters
+              ? 'Lege zuerst deine Zuchttiere an. Danach entsteht mit dem ersten Wurf der komplette Fahrplan von selbst.'
+              : showCats
+                ? 'Lege dein erstes Zuchttier an. Ein Rufname genügt zum Anfangen.'
+                : 'Lege deinen ersten Wurf an. Daraus entsteht der komplette Fahrplan von selbst.'
+          }
           action={
             <div className="flex flex-col gap-2">
-              <Button variant="primary" icon="plus" onClick={() => setCatSheet(true)}>
-                Katze anlegen
-              </Button>
-              <Button icon="paw" onClick={() => setLitterSheet(true)}>
-                Wurf anlegen
-              </Button>
+              {showCats && (
+                <Button variant="primary" icon="plus" onClick={() => setCatSheet(true)}>
+                  Katze anlegen
+                </Button>
+              )}
+              {showLitters && (
+                <Button
+                  variant={showCats ? 'secondary' : 'primary'}
+                  icon="paw"
+                  onClick={() => setLitterSheet(true)}
+                >
+                  Wurf anlegen
+                </Button>
+              )}
             </div>
           }
         />
       ) : (
         <Stack gap="lg">
           {/* --- Laufende Würfe ------------------------------------- */}
-          {running.length > 0 && (
+          {showLitters && running.length > 0 && (
             <Section title="Laufende Würfe">
               <div className="flex flex-col gap-3">
                 {running.map(({ litter, summary, warnings, nextTask }) => (
@@ -183,8 +215,11 @@ export function ZuchtScreen() {
                     warnings={warnings}
                     nextTask={nextTask}
                     settings={settings}
+                    showWeights={showWeights}
                     onOpen={() => navigate(`/zucht/wurf/${litter.id}`)}
-                    onWeigh={() => navigate(`/wiegen/${litter.id}`)}
+                    onWeigh={
+                      showWeights ? () => navigate(`/wiegen/${litter.id}`) : undefined
+                    }
                   />
                 ))}
               </div>
@@ -192,7 +227,7 @@ export function ZuchtScreen() {
           )}
 
           {/* --- Erwartete Würfe ------------------------------------ */}
-          {expected.length > 0 && (
+          {showLitters && expected.length > 0 && (
             <Section title="Erwartet">
               <div className="flex flex-col gap-3">
                 {expected.map((litter) => (
@@ -209,7 +244,7 @@ export function ZuchtScreen() {
             </Section>
           )}
 
-          {running.length === 0 && expected.length === 0 && (
+          {showLitters && running.length === 0 && expected.length === 0 && (
             <Section title="Würfe">
               <EmptyState
                 icon="paw"
@@ -225,7 +260,7 @@ export function ZuchtScreen() {
           )}
 
           {/* --- Zuchttiere ----------------------------------------- */}
-          <Section title="Zuchttiere">
+          {showCats && <Section title="Zuchttiere">
             {data.cats.length === 0 ? (
               <EmptyState
                 icon="cat"
@@ -239,25 +274,20 @@ export function ZuchtScreen() {
               />
             ) : (
               <div className="flex flex-col gap-3">
-                {queens.length > 0 && (
-                  <CatGroup title="Königinnen" cats={queens} onOpen={(id) => navigate(`/zucht/katze/${id}`)} />
-                )}
-                {studs.length > 0 && (
-                  <CatGroup title="Kater" cats={studs} onOpen={(id) => navigate(`/zucht/katze/${id}`)} />
-                )}
+                {queens.length > 0 && <CatGroup title="Königinnen" cats={queens} />}
+                {studs.length > 0 && <CatGroup title="Kater" cats={studs} />}
                 {externalStuds.length > 0 && (
-                  <CatGroup
-                    title="Fremde Deckkater"
-                    cats={externalStuds}
-                    onOpen={(id) => navigate(`/zucht/katze/${id}`)}
-                  />
+                  <CatGroup title="Fremde Deckkater" cats={externalStuds} />
+                )}
+                {externalQueens.length > 0 && (
+                  <CatGroup title="Fremde Katzen" cats={externalQueens} />
                 )}
               </div>
             )}
-          </Section>
+          </Section>}
 
           {/* --- Abgeschlossene Würfe ------------------------------- */}
-          {closed.length > 0 && (
+          {showLitters && closed.length > 0 && (
             <Section title="Abgeschlossen">
               <div className="flex flex-col gap-2">
                 <Button
@@ -306,7 +336,7 @@ export function ZuchtScreen() {
       {/* --- Auswahl beim Anlegen --------------------------------- */}
       <Sheet open={createSheet} onClose={() => setCreateSheet(false)} title="Was möchtest du anlegen?">
         <div className="flex flex-col gap-2">
-          <Button
+          {showLitters && <Button
             size="lg"
             block
             icon="paw"
@@ -317,8 +347,8 @@ export function ZuchtScreen() {
             }}
           >
             Neuer Wurf
-          </Button>
-          <Button
+          </Button>}
+          {showCats && <Button
             size="lg"
             block
             icon="cat"
@@ -328,36 +358,32 @@ export function ZuchtScreen() {
             }}
           >
             Neue Katze
-          </Button>
+          </Button>}
         </div>
       </Sheet>
 
-      <LitterEditorSheet
+      {showLitters && <LitterEditorSheet
         open={litterSheet}
         onClose={() => setLitterSheet(false)}
         cats={data.cats}
         litters={data.litters}
         settings={settings}
         onSaved={(id) => navigate(`/zucht/wurf/${id}`)}
-        onNeedCat={() => setCatSheet(true)}
-      />
+        onNeedCat={showCats ? () => setCatSheet(true) : undefined}
+      />}
 
-      <CatQuickSheet open={catSheet} onClose={() => setCatSheet(false)} settings={settings} />
+      {/* Das vollwertige Editor-Blatt aus dem Katzen-Modul: dort gibt es auch
+          den Schalter „Eigenes Tier", über den fremde Deckkater entstehen. */}
+      {showCats && <CatEditorSheet open={catSheet} onClose={() => setCatSheet(false)} />}
     </Screen>
   );
 }
 
 /* ------------------------------------------------------------------ */
 
-function CatGroup({
-  title,
-  cats,
-  onOpen,
-}: {
-  title: string;
-  cats: Cat[];
-  onOpen: (id: ID) => void;
-}) {
+/** Eine Gruppe Zuchttiere — die Zeilen kommen aus dem Katzen-Modul und
+ *  bringen die Gesundheitstest-Warnung gleich mit. */
+function CatGroup({ title, cats }: { title: string; cats: Cat[] }) {
   return (
     <div className="flex flex-col gap-1.5">
       <h3 className="px-1 text-[0.8rem] font-semibold tracking-wide text-text-faint uppercase">
@@ -365,18 +391,7 @@ function CatGroup({
       </h3>
       <List>
         {cats.map((cat) => (
-          <ListRow
-            key={cat.id}
-            leading={<Icon name="cat" size={22} className="text-text-dim" />}
-            title={cat.callName}
-            subtitle={cat.catteryName}
-            trailing={
-              <Badge tone={cat.status === 'active' ? 'ok' : 'neutral'}>
-                {CAT_STATUS_LABEL[cat.status]}
-              </Badge>
-            }
-            onClick={() => onOpen(cat.id)}
-          />
+          <CatRow key={cat.id} cat={cat} />
         ))}
       </List>
     </div>

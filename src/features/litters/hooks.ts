@@ -6,33 +6,9 @@
  */
 
 import { useEffect, useState } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '../../db/db';
-import { DEFAULT_SETTINGS } from '../../types';
-import type { Settings } from '../../types';
 
-/**
- * Ergänzt gespeicherte Einstellungen um fehlende Zweige. Eine eigene Kopie,
- * weil `mergeSettings` in src/db/db.ts nicht ausgeführt wird — die Einstellungen
- * dort werden zwischengespeichert und wären damit nicht mehr „live".
- */
-export function mergeSettings(stored?: Settings | null): Settings {
-  if (!stored) return DEFAULT_SETTINGS;
-  return {
-    ...DEFAULT_SETTINGS,
-    ...stored,
-    seller: { ...DEFAULT_SETTINGS.seller, ...stored.seller },
-    weight: { ...DEFAULT_SETTINGS.weight, ...stored.weight },
-    schedule: { ...DEFAULT_SETTINGS.schedule, ...stored.schedule },
-    modules: { ...DEFAULT_SETTINGS.modules, ...stored.modules },
-    id: 'singleton',
-  };
-}
-
-/** Einstellungen, die auf Änderungen reagieren. `undefined` = wird noch geladen. */
-export function useSettings(): Settings | undefined {
-  return useLiveQuery(async () => mergeSettings(await db.settings.get('singleton')), []);
-}
+// Einstellungen reaktiv lesen — zentrale Quelle in src/db/useSettings.ts.
+export { mergeSettings, useSettings } from '../../db/useSettings';
 
 /**
  * Tickt im Sekundentakt, solange `active` gilt — für den Wehen-Timer.

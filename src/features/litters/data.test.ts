@@ -5,13 +5,14 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { db, insert, wipeDatabase } from '../../db/db';
+import { db, insert, putAttachment, wipeDatabase } from '../../db/db';
 import { DEFAULT_SETTINGS } from '../../types';
 import type { ID, Litter } from '../../types';
 import { nowISO, todayISO } from '../../lib/date';
 import {
   addBirthEvent,
   addKitten,
+  deleteLitterCascade,
   deleteKitten,
   ensureLitterBorn,
   linkInterest,
@@ -218,6 +219,44 @@ describe('linkInterest', () => {
     expect((await db.interests.get(a.id))?.kittenId).toBeUndefined();
     expect((await db.interests.get(b.id))?.kittenId).toBe(kitten.id);
   });
+
+  it('löst auch die bisherige Kitten-Verbindung des neuen Interessenten', async () => {
+    const litter = await makeLitter();
+    const erstes = await addKitten({ litterId: litter.id, collarColor: 'red' }, settings);
+    const zweites = await addKitten({ litterId: litter.id, collarColor: 'blue' }, settings);
+    const interest = await insert(db.interests, {
+      name: 'Familie A',
+      wishSex: 'any',
+      status: 'reserved',
+      sortIndex: 0,
+    });
+
+    await linkInterest(erstes, interest.id);
+    await db.kittens.update(erstes.id, { saleStatus: 'reserved' });
+    await linkInterest(zweites, interest.id);
+
+    expect((await db.kittens.get(erstes.id))?.interestId).toBeUndefined();
+    expect((await db.kittens.get(erstes.id))?.saleStatus).toBe('available');
+    expect((await db.kittens.get(zweites.id))?.interestId).toBe(interest.id);
+    expect((await db.interests.get(interest.id))?.kittenId).toBe(zweites.id);
+  });
+
+  it('behält die vorhandene Verbindung bei einer unbekannten Zielkennung', async () => {
+    const litter = await makeLitter();
+    const kitten = await addKitten({ litterId: litter.id, collarColor: 'red' }, settings);
+    const interest = await insert(db.interests, {
+      name: 'Familie A',
+      wishSex: 'any',
+      status: 'new',
+      sortIndex: 0,
+    });
+    await linkInterest(kitten, interest.id);
+
+    await linkInterest((await db.kittens.get(kitten.id))!, 'nicht-mehr-da');
+
+    expect((await db.kittens.get(kitten.id))?.interestId).toBe(interest.id);
+    expect((await db.interests.get(interest.id))?.kittenId).toBe(kitten.id);
+  });
 });
 
 describe('deleteKitten', () => {
@@ -236,5 +275,163 @@ describe('deleteKitten', () => {
     expect(await db.weights.where('kittenId').equals(kitten.id).count()).toBe(0);
     expect(await neuterTasks(kitten.id)).toHaveLength(0);
     expect(await db.birthEvents.where('litterId').equals(litter.id).count()).toBe(0);
+  });
+
+  it('löscht das Foto und löst historische Verweise, ohne die Historie zu vernichten', async () => {
+    const litter = await makeLitter({ birthDate: '2026-03-01' });
+    const photo = await putAttachment(new Blob(['foto'], { type: 'image/jpeg' }));
+    const kitten = await addKitten({ litterId: litter.id, collarColor: 'red' }, settings);
+    await db.kittens.update(kitten.id, { photoAttachmentId: photo.id });
+    const current = (await db.kittens.get(kitten.id))!;
+    const interest = await insert(db.interests, {
+      name: 'Familie A',
+      wishSex: 'any',
+      status: 'reserved',
+      sortIndex: 0,
+    });
+    await linkInterest(current, interest.id);
+    const document = await insert(db.documents, {
+      kind: 'vaccination_card',
+      title: 'Impfpass',
+      kittenId: kitten.id,
+      litterId: litter.id,
+      pageIds: [],
+      customerVisible: false,
+    });
+    const cost = await insert(db.costs, {
+      date: '2026-03-02',
+      category: 'vet',
+      amountCents: 5_000,
+      kittenId: kitten.id,
+    });
+    const appointment = await insert(db.appointments, {
+      kind: 'vet',
+      startAt: '2026-03-02T10:00:00.000Z',
+      kittenIds: [kitten.id],
+      remind24h: false,
+      remind1h: false,
+    });
+    const contract = await insert(db.contracts, {
+      type: 'standard',
+      data: {
+        type: 'standard',
+        buyers: [],
+        animals: [{ kittenId: kitten.id, name: 'Mia', sex: 'female' }],
+        breed: 'Russisch Blau',
+      },
+    });
+
+    await deleteKitten((await db.kittens.get(kitten.id))!, settings);
+
+    expect(await db.attachments.get(photo.id)).toBeUndefined();
+    expect((await db.interests.get(interest.id))?.kittenId).toBeUndefined();
+    expect((await db.documents.get(document.id))?.kittenId).toBeUndefined();
+    expect((await db.costs.get(cost.id))?.kittenId).toBeUndefined();
+    expect((await db.appointments.get(appointment.id))?.kittenIds).toBeUndefined();
+    expect((await db.contracts.get(contract.id))?.data.animals).toEqual([
+      { kittenId: undefined, name: 'Mia', sex: 'female' },
+    ]);
+  });
+});
+
+describe('deleteLitterCascade', () => {
+  it('löscht den Wurf atomar und bewahrt historische Datensätze ohne tote Verweise', async () => {
+    const litter = await makeLitter({ birthDate: '2026-03-01' });
+    const photo = await putAttachment(new Blob(['foto'], { type: 'image/jpeg' }));
+    const mia = await addKitten(
+      {
+        litterId: litter.id,
+        collarColor: 'red',
+        birthWeightG: 95,
+        bornAt: noonOf('2026-03-01'),
+      },
+      settings,
+    );
+    const nala = await addKitten({ litterId: litter.id, collarColor: 'blue' }, settings);
+    await db.kittens.update(mia.id, { photoAttachmentId: photo.id });
+    const interest = await insert(db.interests, {
+      name: 'Familie A',
+      wishSex: 'any',
+      status: 'reserved',
+      sortIndex: 0,
+    });
+    await linkInterest((await db.kittens.get(mia.id))!, interest.id);
+    await addBirthEvent(litter.id, 'kitten_born', { kittenId: mia.id });
+
+    const document = await insert(db.documents, {
+      kind: 'vaccination_card',
+      title: 'Impfpass Mia',
+      kittenId: mia.id,
+      litterId: litter.id,
+      pageIds: [],
+      customerVisible: false,
+    });
+    const cost = await insert(db.costs, {
+      date: '2026-03-02',
+      category: 'vet',
+      amountCents: 5_000,
+      litterId: litter.id,
+      kittenId: mia.id,
+    });
+    const revenue = await insert(db.revenues, {
+      date: '2026-06-02',
+      amountCents: 250_000,
+      litterId: litter.id,
+      kittenId: mia.id,
+    });
+    const appointment = await insert(db.appointments, {
+      kind: 'vet',
+      startAt: '2026-03-02T10:00:00.000Z',
+      litterId: litter.id,
+      kittenIds: [mia.id, 'anderes-kitten'],
+      remind24h: false,
+      remind1h: false,
+    });
+    const contract = await insert(db.contracts, {
+      type: 'standard',
+      litterId: litter.id,
+      data: {
+        type: 'standard',
+        buyers: [],
+        animals: [{ kittenId: mia.id, name: 'Mia', sex: 'female' }],
+        breed: 'Russisch Blau',
+      },
+    });
+    const use = await insert(db.breedingUses, {
+      contractId: 'anderer-vertrag',
+      kittenId: nala.id,
+      catName: 'Nala',
+      startDate: '2026-07-01',
+      months: 18,
+      extensionMonths: 6,
+      deadlineDate: '2028-01-01',
+      stage: 'at_buyer',
+      history: [],
+    });
+
+    await deleteLitterCascade(litter.id);
+
+    expect(await db.litters.get(litter.id)).toBeUndefined();
+    expect(await db.kittens.where('litterId').equals(litter.id).count()).toBe(0);
+    expect(await db.weights.where('kittenId').anyOf([mia.id, nala.id]).count()).toBe(0);
+    expect(await db.careTasks.where('litterId').equals(litter.id).count()).toBe(0);
+    expect(await db.birthEvents.where('litterId').equals(litter.id).count()).toBe(0);
+    expect(await db.attachments.get(photo.id)).toBeUndefined();
+    expect((await db.interests.get(interest.id))?.kittenId).toBeUndefined();
+    expect((await db.documents.get(document.id))?.litterId).toBeUndefined();
+    expect((await db.documents.get(document.id))?.kittenId).toBeUndefined();
+    expect((await db.costs.get(cost.id))?.litterId).toBeUndefined();
+    expect((await db.costs.get(cost.id))?.kittenId).toBeUndefined();
+    expect((await db.revenues.get(revenue.id))?.litterId).toBeUndefined();
+    expect((await db.revenues.get(revenue.id))?.kittenId).toBeUndefined();
+    expect((await db.appointments.get(appointment.id))?.litterId).toBeUndefined();
+    expect((await db.appointments.get(appointment.id))?.kittenIds).toEqual([
+      'anderes-kitten',
+    ]);
+    expect((await db.contracts.get(contract.id))?.litterId).toBeUndefined();
+    expect((await db.contracts.get(contract.id))?.data.animals).toEqual([
+      { kittenId: undefined, name: 'Mia', sex: 'female' },
+    ]);
+    expect((await db.breedingUses.get(use.id))?.kittenId).toBeUndefined();
   });
 });

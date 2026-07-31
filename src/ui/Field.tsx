@@ -1,5 +1,6 @@
 import {
   useId,
+  useRef,
   useState,
   type InputHTMLAttributes,
   type ReactNode,
@@ -195,6 +196,7 @@ export function NumberInput({
   hint,
   error,
   required,
+  containerClassName,
   className = '',
   ...rest
 }: NumberInputProps) {
@@ -202,7 +204,13 @@ export function NumberInput({
   const shown = raw ?? (value == null ? '' : String(value).replace('.', ','));
 
   return (
-    <Field label={label} hint={hint} error={error} required={required}>
+    <Field
+      label={label}
+      hint={hint}
+      error={error}
+      required={required}
+      className={containerClassName}
+    >
       {({ id, describedBy, invalid }) => (
         <div className="relative">
           <input
@@ -358,25 +366,48 @@ export function Segmented<T extends string>({
   label,
   className = '',
 }: SegmentedProps<T>) {
+  const buttonsRef = useRef<Array<HTMLButtonElement | null>>([]);
+
+  function selectWithKeyboard(index: number, key: string) {
+    const last = options.length - 1;
+    let next = index;
+    if (key === 'ArrowRight' || key === 'ArrowDown') next = index === last ? 0 : index + 1;
+    else if (key === 'ArrowLeft' || key === 'ArrowUp') next = index === 0 ? last : index - 1;
+    else if (key === 'Home') next = 0;
+    else if (key === 'End') next = last;
+    else return false;
+
+    onChange(options[next].value);
+    buttonsRef.current[next]?.focus();
+    return true;
+  }
+
   return (
     <div className={['flex flex-col gap-1.5', className].join(' ')}>
       {label && <span className="px-1 text-[0.85rem] font-medium text-text-dim">{label}</span>}
       <div
         role="radiogroup"
-        aria-label={label}
+        aria-label={label ?? 'Auswahl'}
         className="flex gap-1 rounded-[var(--radius-field)] bg-surface-2 p-1"
       >
-        {options.map((o) => {
+        {options.map((o, index) => {
           const active = o.value === value;
           return (
             <button
+              ref={(node) => {
+                buttonsRef.current[index] = node;
+              }}
               key={o.value}
               type="button"
               role="radio"
               aria-checked={active}
+              tabIndex={active ? 0 : -1}
               onClick={() => onChange(o.value)}
+              onKeyDown={(event) => {
+                if (selectWithKeyboard(index, event.key)) event.preventDefault();
+              }}
               className={[
-                'min-h-9 flex-1 rounded-[calc(var(--radius-field)-0.25rem)] px-2 text-[0.88rem] font-medium transition-colors',
+                'min-h-11 flex-1 rounded-[calc(var(--radius-field)-0.25rem)] px-2 text-[0.88rem] font-medium transition-colors',
                 active
                   ? 'bg-surface text-text shadow-[var(--shadow-card)]'
                   : 'text-text-dim active:bg-surface-3',

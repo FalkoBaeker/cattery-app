@@ -110,6 +110,10 @@ function input(over: Partial<DashboardInput> = {}): DashboardInput {
     healthTests: [],
     breedingUses: [],
     interests: [],
+    documents: [],
+    contracts: [],
+    costs: [],
+    revenues: [],
     ...over,
   };
 }
@@ -193,7 +197,7 @@ describe('buildDashboard — Wiege-Erinnerung', () => {
     expect(model.weighReminders[0].phase).toBe('daily');
   });
 
-  it('schweigt, wenn heute schon gewogen wurde', () => {
+  it('erinnert nach der ersten Tageswiegung weiter an die zweite', () => {
     const model = buildDashboard(
       input({
         today: '2026-03-05',
@@ -201,6 +205,23 @@ describe('buildDashboard — Wiege-Erinnerung', () => {
         litters: [litter()],
         kittens: [kitten()],
         weights: [weight('kit-1', '2026-03-05', 130)],
+      }),
+    );
+    expect(model.weighReminders).toHaveLength(1);
+    expect(model.weighReminders[0].pending).toBe(1);
+  });
+
+  it('schweigt nach zwei Tageswiegungen', () => {
+    const model = buildDashboard(
+      input({
+        today: '2026-03-05',
+        cats: [cat()],
+        litters: [litter()],
+        kittens: [kitten()],
+        weights: [
+          weight('kit-1', '2026-03-05', 130, 7),
+          weight('kit-1', '2026-03-05', 136, 19),
+        ],
       }),
     );
     expect(model.weighReminders).toEqual([]);
@@ -296,7 +317,10 @@ describe('buildDashboard — Wiege-Erinnerung', () => {
         cats: [cat()],
         litters: [litter()],
         kittens,
-        weights: [weight('k0', '2026-03-05', 140)],
+        weights: [
+          weight('k0', '2026-03-05', 140, 7),
+          weight('k0', '2026-03-05', 146, 19),
+        ],
       }),
     );
     expect(model.weighReminders[0].total).toBe(9);

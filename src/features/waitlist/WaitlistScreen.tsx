@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
   DndContext,
@@ -57,6 +57,7 @@ import {
   filterInterests,
   formatPurgeHint,
   isFilterActive,
+  lastContactByInterest,
   moveAndResequence,
   shortNote,
   sortWaitlist,
@@ -115,7 +116,7 @@ function InterestRow({
   sortable: boolean;
   onOpen: () => void;
 }) {
-  const { setNodeRef, listeners, transform, transition, isDragging } = useSortable({
+  const { setNodeRef, listeners, attributes, transform, transition, isDragging } = useSortable({
     id: interest.id,
     disabled: !sortable,
   });
@@ -146,6 +147,9 @@ function InterestRow({
       ref={setNodeRef}
       style={style}
       {...listeners}
+      // Ohne diese Angaben (tabIndex, role, aria-…) ist die Zeile nicht
+      // fokussierbar und das Sortieren per Tastatur bliebe wirkungslos.
+      {...(sortable ? attributes : {})}
       className={[
         'flex items-stretch gap-1 border-b border-border bg-surface last:border-b-0',
         isDragging
@@ -206,7 +210,12 @@ function TrashSection({ items }: { items: Interest[] }) {
   const confirm = useConfirm();
 
   async function restore(item: Interest) {
-    await restoreInterest(item.id);
+    try {
+      await restoreInterest(item.id);
+    } catch {
+      toast.error(`${item.name} ließ sich nicht zurückholen.`);
+      return;
+    }
     toast.show(`${item.name} ist zurück auf der Warteliste.`, {
       tone: 'ok',
       icon: 'check-circle',
@@ -222,7 +231,12 @@ function TrashSection({ items }: { items: Interest[] }) {
       danger: true,
     });
     if (!ok) return;
-    await purgeInterest(item.id);
+    try {
+      await purgeInterest(item.id);
+    } catch {
+      toast.error('Der Eintrag ließ sich nicht löschen.');
+      return;
+    }
     toast.show('Eintrag endgültig gelöscht.');
   }
 
@@ -257,10 +271,10 @@ function TrashSection({ items }: { items: Interest[] }) {
                 {item.deletedAt ? formatPurgeHint(item.deletedAt) : ''}
               </p>
               <div className="mt-2 flex gap-2">
-                <Button size="sm" icon="refresh" onClick={() => void restore(item)}>
+                <Button icon="refresh" onClick={() => void restore(item)}>
                   Zurückholen
                 </Button>
-                <Button size="sm" variant="ghost" icon="trash" onClick={() => void purge(item)}>
+                <Button variant="ghost" icon="trash" onClick={() => void purge(item)}>
                   Endgültig
                 </Button>
               </div>
@@ -316,15 +330,7 @@ export function WaitlistScreen() {
     [all],
   );
 
-  const lastContactByInterest = useMemo(() => {
-    const map = new Map<ID, string>();
-    if (!notes) return map;
-    for (const n of notes) {
-      const current = map.get(n.interestId);
-      if (!current || n.at.localeCompare(current) > 0) map.set(n.interestId, n.at);
-    }
-    return map;
-  }, [notes]);
+  const lastContact = useMemo(() => lastContactByInterest(notes ?? []), [notes]);
 
   const filtered = useMemo(
     () => (active ? filterInterests(active, filter) : undefined),
@@ -373,7 +379,9 @@ export function WaitlistScreen() {
   function handleDragStart(event: DragStartEvent) {
     dragTouchedAt.current = Date.now();
     setDraggingId(String(event.active.id));
-    // Spürbare Rückmeldung, sofern das Gerät sie kennt.
+    // Spürbare Rückmeldung — allerdings kennt iOS (also das Zielgerät)
+    // navigator.vibrate nicht; dort passiert schlicht nichts. Der Aufruf
+    // bleibt für den Entwicklungsbetrieb auf anderen Geräten stehen.
     if (typeof navigator.vibrate === 'function') navigator.vibrate(10);
   }
 
@@ -467,6 +475,10 @@ export function WaitlistScreen() {
         <IconButton
           icon="whatsapp"
           label="Sammelnachricht"
+          // Solange unklar ist, ob schon ein Versand läuft (undefined = lädt
+          // noch), darf kein neuer gestartet werden — er würde den laufenden
+          // Stand überschreiben.
+          disabled={broadcast === undefined}
           onClick={() => (broadcast ? setRunOpen(true) : setComposeOpen(true))}
         />
       }
@@ -536,7 +548,7 @@ export function WaitlistScreen() {
                     <InterestRow
                       key={item.id}
                       interest={item}
-                      lastContact={lastContactByInterest.get(item.id)}
+                      lastContact={lastContact.get(item.id)}
                       sortable={canSort}
                       onOpen={() => openInterest(item.id)}
                     />

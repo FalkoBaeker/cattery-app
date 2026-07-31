@@ -14,6 +14,7 @@ export { WeightBadge, type WeightBadgeProps } from './WeightBadge';
 export {
   analyzeKitten,
   dayOfLife,
+  dayOfLifeLabel,
   dayProgress,
   deltaToPrevious,
   latestDelta,

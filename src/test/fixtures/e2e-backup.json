@@ -1,0 +1,351 @@
+{
+  "format": "cattery-backup",
+  "version": 1,
+  "createdAt": "2026-07-31T09:30:00.000Z",
+  "tables": {
+    "cats": [
+      {
+        "id": "cat-mascha",
+        "callName": "Mascha",
+        "catteryName": "Mascha vom Silberwald",
+        "sex": "female",
+        "birthDate": "2022-04-12",
+        "breed": "Russisch Blau",
+        "emsCode": "RUS a",
+        "chipNo": "276093400000001",
+        "status": "active",
+        "isOwn": true,
+        "inbreedingPercent": 6.25,
+        "createdAt": "2026-01-01T00:00:00.000Z",
+        "updatedAt": "2026-07-20T00:00:00.000Z"
+      },
+      {
+        "id": "cat-boris",
+        "callName": "Boris",
+        "sex": "male",
+        "birthDate": "2021-09-20",
+        "breed": "Russisch Blau",
+        "emsCode": "RUS a",
+        "status": "active",
+        "isOwn": true,
+        "createdAt": "2026-01-01T00:00:00.000Z",
+        "updatedAt": "2026-07-20T00:00:00.000Z"
+      }
+    ],
+    "heatCycles": [
+      {
+        "id": "heat-1",
+        "catId": "cat-mascha",
+        "startDate": "2025-10-01",
+        "endDate": "2025-10-06",
+        "createdAt": "2025-10-01T08:00:00.000Z",
+        "updatedAt": "2025-10-06T08:00:00.000Z"
+      },
+      {
+        "id": "heat-2",
+        "catId": "cat-mascha",
+        "startDate": "2025-10-22",
+        "endDate": "2025-10-27",
+        "createdAt": "2025-10-22T08:00:00.000Z",
+        "updatedAt": "2025-10-27T08:00:00.000Z"
+      },
+      {
+        "id": "heat-3",
+        "catId": "cat-mascha",
+        "startDate": "2025-11-12",
+        "endDate": "2025-11-17",
+        "createdAt": "2025-11-12T08:00:00.000Z",
+        "updatedAt": "2025-11-17T08:00:00.000Z"
+      }
+    ],
+    "healthTests": [
+      {
+        "id": "health-hcm",
+        "catId": "cat-mascha",
+        "kind": "hcm",
+        "date": "2026-01-10",
+        "result": "ohne Befund",
+        "validMonths": 6,
+        "nextDueDate": "2026-07-10",
+        "createdAt": "2026-01-10T12:00:00.000Z",
+        "updatedAt": "2026-01-10T12:00:00.000Z"
+      }
+    ],
+    "litters": [
+      {
+        "id": "litter-july",
+        "motherId": "cat-mascha",
+        "fatherId": "cat-boris",
+        "matingDate": "2026-05-16",
+        "dueDate": "2026-07-20",
+        "birthDate": "2026-07-20",
+        "status": "born",
+        "notes": "Ruhige Geburt, beide Kitten fit.",
+        "createdAt": "2026-05-16T10:00:00.000Z",
+        "updatedAt": "2026-07-20T04:00:00.000Z"
+      }
+    ],
+    "birthEvents": [
+      {
+        "id": "birth-contraction-1",
+        "litterId": "litter-july",
+        "at": "2026-07-20T01:45:00.000Z",
+        "kind": "contraction"
+      },
+      {
+        "id": "birth-red",
+        "litterId": "litter-july",
+        "kittenId": "kit-red",
+        "at": "2026-07-20T02:10:00.000Z",
+        "kind": "kitten_born"
+      },
+      {
+        "id": "birth-blue",
+        "litterId": "litter-july",
+        "kittenId": "kit-blue",
+        "at": "2026-07-20T02:25:00.000Z",
+        "kind": "kitten_born"
+      },
+      {
+        "id": "birth-placenta",
+        "litterId": "litter-july",
+        "at": "2026-07-20T02:31:00.000Z",
+        "kind": "placenta"
+      }
+    ],
+    "kittens": [
+      {
+        "id": "kit-red",
+        "litterId": "litter-july",
+        "collarColor": "red",
+        "callName": "Mia",
+        "sex": "female",
+        "bornAt": "2026-07-20T02:10:00.000Z",
+        "stillborn": false,
+        "birthWeightG": 92,
+        "saleStatus": "available",
+        "priceCents": 250000,
+        "createdAt": "2026-07-20T02:10:00.000Z",
+        "updatedAt": "2026-07-31T08:00:00.000Z"
+      },
+      {
+        "id": "kit-blue",
+        "litterId": "litter-july",
+        "collarColor": "blue",
+        "callName": "Leo",
+        "sex": "male",
+        "bornAt": "2026-07-20T02:25:00.000Z",
+        "stillborn": false,
+        "birthWeightG": 88,
+        "saleStatus": "reserved",
+        "interestId": "interest-anna",
+        "priceCents": 250000,
+        "createdAt": "2026-07-20T02:25:00.000Z",
+        "updatedAt": "2026-07-31T08:00:00.000Z"
+      }
+    ],
+    "weights": [
+      {"id":"wr-1","kittenId":"kit-red","at":"2026-07-20T02:10:00.000Z","grams":92},
+      {"id":"wr-2","kittenId":"kit-red","at":"2026-07-21T08:00:00.000Z","grams":104},
+      {"id":"wr-3","kittenId":"kit-red","at":"2026-07-22T08:00:00.000Z","grams":116},
+      {"id":"wr-4","kittenId":"kit-red","at":"2026-07-24T08:00:00.000Z","grams":136},
+      {"id":"wr-5","kittenId":"kit-red","at":"2026-07-26T08:00:00.000Z","grams":154},
+      {"id":"wr-6","kittenId":"kit-red","at":"2026-07-28T08:00:00.000Z","grams":170},
+      {"id":"wr-7","kittenId":"kit-red","at":"2026-07-31T08:00:00.000Z","grams":194},
+      {"id":"wb-1","kittenId":"kit-blue","at":"2026-07-20T02:25:00.000Z","grams":88},
+      {"id":"wb-2","kittenId":"kit-blue","at":"2026-07-21T08:00:00.000Z","grams":98},
+      {"id":"wb-3","kittenId":"kit-blue","at":"2026-07-22T08:00:00.000Z","grams":109},
+      {"id":"wb-4","kittenId":"kit-blue","at":"2026-07-24T08:00:00.000Z","grams":129},
+      {"id":"wb-5","kittenId":"kit-blue","at":"2026-07-26T08:00:00.000Z","grams":148},
+      {"id":"wb-6","kittenId":"kit-blue","at":"2026-07-28T08:00:00.000Z","grams":165},
+      {"id":"wb-7","kittenId":"kit-blue","at":"2026-07-31T08:00:00.000Z","grams":190}
+    ],
+    "catWeights": [
+      {
+        "id": "cat-weight-1",
+        "catId": "cat-mascha",
+        "at": "2026-06-15T08:00:00.000Z",
+        "grams": 4120,
+        "note": "Trächtigkeit"
+      }
+    ],
+    "careTasks": [
+      {
+        "id":"task-deworm-1","kind":"deworming","title":"Entwurmung 1","dueDate":"2026-08-17","litterId":"litter-july","autoGenerated":true,"planKey":"deworming:1","detail":"Fenbendazol","createdAt":"2026-07-20T04:00:00.000Z","updatedAt":"2026-07-20T04:00:00.000Z"
+      },
+      {
+        "id":"task-deworm-2","kind":"deworming","title":"Entwurmung 2","dueDate":"2026-08-31","litterId":"litter-july","autoGenerated":true,"planKey":"deworming:2","detail":"Fenbendazol","createdAt":"2026-07-20T04:00:00.000Z","updatedAt":"2026-07-20T04:00:00.000Z"
+      },
+      {
+        "id":"task-vacc-1","kind":"vaccination","title":"Impfung 1","dueDate":"2026-09-14","litterId":"litter-july","autoGenerated":true,"planKey":"vaccination:1","createdAt":"2026-07-20T04:00:00.000Z","updatedAt":"2026-07-20T04:00:00.000Z"
+      },
+      {
+        "id":"task-chip","kind":"chip","title":"Chippen","dueDate":"2026-09-14","litterId":"litter-july","autoGenerated":true,"planKey":"chip","createdAt":"2026-07-20T04:00:00.000Z","updatedAt":"2026-07-20T04:00:00.000Z"
+      },
+      {
+        "id":"task-neuter","kind":"neuter","title":"Kastration","dueDate":"2026-09-28","litterId":"litter-july","kittenId":"kit-blue","autoGenerated":true,"planKey":"neuter","createdAt":"2026-07-20T04:00:00.000Z","updatedAt":"2026-07-20T04:00:00.000Z"
+      },
+      {
+        "id":"task-register","kind":"litter_registration","title":"Wurfmeldung","dueDate":"2026-09-28","litterId":"litter-july","autoGenerated":true,"planKey":"litter-registration","createdAt":"2026-07-20T04:00:00.000Z","updatedAt":"2026-07-20T04:00:00.000Z"
+      },
+      {
+        "id":"task-handover","kind":"handover_allowed","title":"Abgabe frühestens","dueDate":"2026-10-12","litterId":"litter-july","autoGenerated":true,"planKey":"handover","createdAt":"2026-07-20T04:00:00.000Z","updatedAt":"2026-07-20T04:00:00.000Z"
+      }
+    ],
+    "interests": [
+      {
+        "id": "interest-anna",
+        "name": "Anna Beispiel",
+        "phone": "+49 170 1234567",
+        "email": "anna@example.invalid",
+        "city": "Beispielstadt",
+        "source": "Homepage",
+        "wishSex": "male",
+        "hasOtherPets": true,
+        "hasChildren": true,
+        "outdoorPlanned": false,
+        "offeredPriceCents": 250000,
+        "status": "reserved",
+        "sortIndex": 0,
+        "kittenId": "kit-blue",
+        "notes": "Ruhiger Haushalt, sehr nettes Gespräch.",
+        "createdAt": "2026-07-01T10:00:00.000Z",
+        "updatedAt": "2026-07-30T10:00:00.000Z"
+      }
+    ],
+    "interestNotes": [
+      {
+        "id": "interest-note-1",
+        "interestId": "interest-anna",
+        "at": "2026-07-01T10:00:00.000Z",
+        "channel": "whatsapp",
+        "text": "Erstanfrage über die Homepage."
+      },
+      {
+        "id": "interest-note-2",
+        "interestId": "interest-anna",
+        "at": "2026-07-28T18:00:00.000Z",
+        "channel": "call",
+        "text": "Leo fest reserviert, Abholung nach der zweiten Impfung."
+      }
+    ],
+    "appointments": [
+      {
+        "id": "appointment-visit",
+        "kind": "meet_kittens",
+        "startAt": "2026-08-01T14:00:00.000Z",
+        "durationMin": 60,
+        "interestId": "interest-anna",
+        "litterId": "litter-july",
+        "kittenIds": ["kit-blue"],
+        "location": "bei uns",
+        "note": "Schuhe aus, Hände waschen.",
+        "remind24h": true,
+        "remind1h": true,
+        "createdAt": "2026-07-30T10:00:00.000Z",
+        "updatedAt": "2026-07-30T10:00:00.000Z"
+      }
+    ],
+    "documents": [
+      {
+        "id": "document-passport",
+        "kind": "vaccination_card",
+        "title": "Impfpass Mia",
+        "kittenId": "kit-red",
+        "litterId": "litter-july",
+        "pageIds": ["attachment-passport"],
+        "customerVisible": false,
+        "createdAt": "2026-07-30T10:00:00.000Z",
+        "updatedAt": "2026-07-30T10:00:00.000Z"
+      }
+    ],
+    "contracts": [],
+    "breedingUses": [],
+    "costs": [
+      {
+        "id": "cost-vet",
+        "date": "2026-07-20",
+        "category": "vet",
+        "amountCents": 18000,
+        "litterId": "litter-july",
+        "note": "Geburtskontrolle",
+        "createdAt": "2026-07-20T12:00:00.000Z",
+        "updatedAt": "2026-07-20T12:00:00.000Z"
+      }
+    ],
+    "revenues": [
+      {
+        "id": "revenue-leo",
+        "date": "2026-07-30",
+        "amountCents": 250000,
+        "litterId": "litter-july",
+        "kittenId": "kit-blue",
+        "note": "Vereinbarter Preis",
+        "createdAt": "2026-07-30T12:00:00.000Z",
+        "updatedAt": "2026-07-30T12:00:00.000Z"
+      }
+    ],
+    "settings": [
+      {
+        "id": "singleton",
+        "seller": {
+          "name": "Beispiel Züchterin",
+          "address": "Beispielweg 3\n12345 Beispielstadt",
+          "birthDate": "1985-06-14",
+          "iban": "DE00 0000 0000 0000 0000 00",
+          "place": "Beispielstadt",
+          "catteryName": "vom Silberwald",
+          "clubName": "Catmaniac"
+        },
+        "breed": "Russisch Blau",
+        "gestationDays": 65,
+        "defaultKittenPriceCents": 250000,
+        "maxLittersPerQueen": 3,
+        "maxLittersWithinMonths": 24,
+        "weight": {
+          "goodGainG": 7,
+          "watchGainG": 6,
+          "concernBirthWeightG": 80,
+          "belowLitterAvgPercent": 15,
+          "typicalBirthWeightG": 90
+        },
+        "schedule": {
+          "dewormingWeeks": [4,6,8],
+          "vaccinationWeeks": [8,12],
+          "chipWeek": 8,
+          "neuterWeek": 10,
+          "litterRegistrationWeek": 10,
+          "handoverWeek": 12,
+          "reminderLeadDays": 4,
+          "dewormingDrug": "Fenbendazol"
+        },
+        "modules": {
+          "cats": true,
+          "litters": true,
+          "weights": true,
+          "waitlist": true,
+          "appointments": true,
+          "documents": true,
+          "contracts": true,
+          "costs": true
+        },
+        "theme": "system",
+        "backupIntervalDays": 14,
+        "whatsappTemplate": "Hallo {name},\n\nbei uns sind Kitten geboren! Wenn du magst, melde dich gern bei uns.\n\nLiebe Grüße",
+        "onboardingDoneAt": "2026-07-31T09:30:00.000Z"
+      }
+    ],
+    "notificationLog": []
+  },
+  "attachments": [
+    {
+      "id": "attachment-passport",
+      "mime": "image/png",
+      "bytes": 67,
+      "width": 1,
+      "height": 1,
+      "createdAt": "2026-07-30T10:00:00.000Z",
+      "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl7mQAAAABJRU5ErkJggg=="
+    }
+  ]
+}

@@ -61,7 +61,14 @@ export function DocumentRow({
         )}
       </button>
       <span className="pr-2">
-        <IconButton icon="edit" label={`${doc.title} bearbeiten`} size="sm" onClick={onEdit} />
+        {/* min-h/min-w 11: 44-px-Ziel trotz kleiner Optik. */}
+        <IconButton
+          icon="edit"
+          label={`${doc.title} bearbeiten`}
+          size="sm"
+          className="min-h-11 min-w-11"
+          onClick={onEdit}
+        />
       </span>
     </div>
   );

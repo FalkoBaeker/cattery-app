@@ -623,6 +623,13 @@ export interface BreedingUse extends Timestamped {
   extendedAt?: ISODate;
   /** Errechnet, für Index und Sortierung mitgespeichert. */
   deadlineDate: ISODate;
+  /**
+   * Geldbetrag und Zahlungsfrist werden beim Anlegen mitgespeichert. So bleibt
+   * der laufende Vorgang auch dann vollständig, wenn der Vertrag später
+   * bewusst gelöscht wird.
+   */
+  discountCents?: number;
+  backPaymentDays?: number;
   stage: BreedingUseStage;
   history: { stage: BreedingUseStage; at: ISODateTime; note?: string }[];
   notes?: string;

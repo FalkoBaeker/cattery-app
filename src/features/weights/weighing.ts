@@ -76,9 +76,14 @@ export function nextFocusId(
 /*  Vergleich mit der letzten Messung                                  */
 /* ------------------------------------------------------------------ */
 
-/** Jüngste Messung *vor* dem Zeitpunkt `at`. Gleichstände zählen nicht mit. */
+/**
+ * Jüngste Messung *bis einschließlich* dem Zeitpunkt `at`. Die betrachtete
+ * Messung selbst darf nicht in `entries` stecken — die Aufrufer schließen sie
+ * aus. So bekommt auch die zweite von zwei Messungen mit exakt gleichem
+ * Zeitstempel eine Vorgängerin.
+ */
 export function previousSample(entries: WeightSample[], at: ISODateTime): WeightSample | undefined {
-  const sorted = sortSamples(entries).filter((e) => e.at < at);
+  const sorted = sortSamples(entries).filter((e) => e.at <= at);
   return sorted[sorted.length - 1];
 }
 

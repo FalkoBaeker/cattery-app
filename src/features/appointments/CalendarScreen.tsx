@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import {
   Badge,
   Button,
@@ -38,7 +38,7 @@ import {
   type CalendarEntry,
 } from './reminders';
 import { useCalendarData } from './useCalendarData';
-import { pruneReminderLog, useNotifyState, useReminderRunner } from './notify';
+import { pruneReminderLog, useNotifyState } from './notify';
 import { NotifySheet } from './NotifySheet';
 import { FollowUpSheet } from './FollowUpSheet';
 import { SwipeCard } from './SwipeCard';
@@ -148,10 +148,6 @@ export function CalendarScreen() {
   const [notifyOpen, setNotifyOpen] = useState(false);
   const [followUp, setFollowUp] = useState<Appointment | null>(null);
   const [notify, refreshNotify] = useNotifyState();
-
-  // Der Prüflauf startet schon beim Laden der App (siehe notify.ts). Hier wird
-  // er nur zusätzlich am Leben gehalten — doppelt läuft er dadurch nicht.
-  useReminderRunner();
 
   useEffect(() => {
     void pruneReminderLog().catch(() => {

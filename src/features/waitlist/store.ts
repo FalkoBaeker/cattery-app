@@ -116,17 +116,36 @@ async function releaseKitten(kittenId: ID, interestId: ID): Promise<void> {
  * wenn `kittenId` fehlt) und führt den Verkaufsstatus mit.
  */
 export async function setReservedKitten(interest: Interest, kittenId?: ID): Promise<void> {
-  if (interest.kittenId && interest.kittenId !== kittenId) {
-    await releaseKitten(interest.kittenId, interest.id);
-  }
-  await patch(db.interests, interest.id, { kittenId });
-  if (!kittenId) return;
+  await db.transaction('rw', db.interests, db.kittens, async () => {
+    const current = await db.interests.get(interest.id);
+    if (!current) return;
 
-  const kitten = await db.kittens.get(kittenId);
-  if (!kitten) return;
-  await patch(db.kittens, kittenId, {
-    interestId: interest.id,
-    saleStatus: saleStatusFor(interest.status, kitten.saleStatus),
+    // Erst prüfen, dann verändern: Eine veraltete Kitten-Kennung darf keine
+    // bestehende, gültige Reservierung lösen.
+    const kitten = kittenId ? await db.kittens.get(kittenId) : undefined;
+    if (kittenId && !kitten) return;
+
+    if (current.kittenId && current.kittenId !== kittenId) {
+      await releaseKitten(current.kittenId, current.id);
+    }
+    if (!kitten) {
+      await patch(db.interests, current.id, { kittenId: undefined });
+      return;
+    }
+
+    // Ein Kitten kann nie zwei Interessenten gleichzeitig gehören.
+    if (kitten.interestId && kitten.interestId !== current.id) {
+      const previousOwner = await db.interests.get(kitten.interestId);
+      if (previousOwner?.kittenId === kitten.id) {
+        await patch(db.interests, previousOwner.id, { kittenId: undefined });
+      }
+    }
+
+    await patch(db.interests, current.id, { kittenId: kitten.id });
+    await patch(db.kittens, kitten.id, {
+      interestId: current.id,
+      saleStatus: saleStatusFor(current.status, kitten.saleStatus),
+    });
   });
 }
 
@@ -142,24 +161,35 @@ export async function setInterestStatus(
   interest: Interest,
   status: InterestStatus,
 ): Promise<void> {
-  const changes: Partial<Interest> = {
-    status,
-    deletedAt: status === 'declined' ? nowISO() : undefined,
-  };
-  await patch(db.interests, interest.id, changes);
+  await db.transaction('rw', db.interests, db.kittens, async () => {
+    const current = await db.interests.get(interest.id);
+    if (!current) return;
+    const changes: Partial<Interest> = {
+      status,
+      deletedAt: status === 'declined' ? nowISO() : undefined,
+    };
+    // Kommt der Eintrag aus dem Papierkorb zurück, stellt er sich unten an —
+    // sein alter sortIndex kann inzwischen neu vergeben worden sein.
+    if (current.deletedAt && status !== 'declined') {
+      const all = await db.interests.toArray();
+      const active = all.filter((i) => !i.deletedAt && i.id !== current.id);
+      changes.sortIndex = nextSortIndex(active);
+    }
+    await patch(db.interests, current.id, changes);
 
-  if (!interest.kittenId) return;
-  if (status === 'declined') {
-    await releaseKitten(interest.kittenId, interest.id);
-    await patch(db.interests, interest.id, { kittenId: undefined });
-    return;
-  }
-  const kitten = await db.kittens.get(interest.kittenId);
-  if (!kitten) return;
-  const next = saleStatusFor(status, kitten.saleStatus);
-  if (next !== kitten.saleStatus) {
-    await patch(db.kittens, kitten.id, { saleStatus: next });
-  }
+    if (!current.kittenId) return;
+    if (status === 'declined') {
+      await releaseKitten(current.kittenId, current.id);
+      await patch(db.interests, current.id, { kittenId: undefined });
+      return;
+    }
+    const kitten = await db.kittens.get(current.kittenId);
+    if (!kitten) return;
+    const next = saleStatusFor(status, kitten.saleStatus);
+    if (next !== kitten.saleStatus) {
+      await patch(db.kittens, kitten.id, { saleStatus: next });
+    }
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -173,30 +203,76 @@ export async function trashInterest(id: ID): Promise<void> {
 /** Holt einen Eintrag zurück und stellt ihn unten in die Liste. */
 export async function restoreInterest(id: ID): Promise<void> {
   const all = await db.interests.toArray();
+  const current = all.find((i) => i.id === id);
   const active = all.filter((i) => !i.deletedAt && i.id !== id);
-  await patch(db.interests, id, {
+  const changes: Partial<Interest> = {
     deletedAt: undefined,
     sortIndex: nextSortIndex(active),
-  });
+  };
+  // Ein zurückgeholter Eintrag darf nicht mit „Abgesagt" auf der Liste
+  // stehen — sonst räumt ihn der nächste Absage-Automatismus gleich wieder
+  // weg und die Anzeige widerspricht sich.
+  if (current?.status === 'declined') changes.status = 'contacted';
+  await patch(db.interests, id, changes);
 }
 
 /**
- * Endgültiges Löschen. Nimmt den Verlauf mit, gibt ein reserviertes Kitten
- * frei und entfernt den Verweis aus Terminen — sonst zeigen die auf einen
- * Interessenten, den es nicht mehr gibt.
+ * Endgültiges Löschen. Nimmt den Verlauf mit, gibt verknüpfte Kitten frei
+ * und löst die interne Zuordnung aus historischen Datensätzen. Deren
+ * lesbarer Inhalt bleibt erhalten.
  */
 export async function purgeInterest(id: ID): Promise<void> {
-  const interest = await db.interests.get(id);
-  if (interest?.kittenId) await releaseKitten(interest.kittenId, id);
+  await db.transaction(
+    'rw',
+    [
+      db.interests,
+      db.kittens,
+      db.appointments,
+      db.documents,
+      db.contracts,
+      db.interestNotes,
+      db.notificationLog,
+    ],
+    async () => {
+      const interest = await db.interests.get(id);
+      // Auch inkonsistente Altstände bereinigen, in denen nur das Kitten auf
+      // den Interessenten zeigt oder mehrere Kitten dieselbe Kennung tragen.
+      const linkedKittenIds = new Set(
+        (await db.kittens.where('interestId').equals(id).toArray()).map((kitten) => kitten.id),
+      );
+      if (interest?.kittenId) linkedKittenIds.add(interest.kittenId);
+      for (const kittenId of linkedKittenIds) {
+        await releaseKitten(kittenId, id);
+      }
 
-  const appointments = await db.appointments.where('interestId').equals(id).toArray();
-  for (const a of appointments) {
-    await patch(db.appointments, a.id, { interestId: undefined });
-  }
+      const appointments = await db.appointments.where('interestId').equals(id).toArray();
+      for (const a of appointments) {
+        await patch(db.appointments, a.id, { interestId: undefined });
+      }
 
-  const notes = await db.interestNotes.where('interestId').equals(id).toArray();
-  for (const n of notes) await remove(db.interestNotes, n.id);
-  await remove(db.interests, id);
+      const documents = await db.documents.where('interestId').equals(id).toArray();
+      for (const document of documents) {
+        await patch(db.documents, document.id, { interestId: undefined });
+      }
+
+      const contracts = await db.contracts.where('interestId').equals(id).toArray();
+      for (const contract of contracts) {
+        await patch(db.contracts, contract.id, { interestId: undefined });
+      }
+
+      const broadcast = await loadBroadcastRun();
+      if (broadcast?.recipients.some((recipient) => recipient.interestId === id)) {
+        const recipients = broadcast.recipients.filter(
+          (recipient) => recipient.interestId !== id,
+        );
+        if (recipients.length === 0) await clearBroadcastRun();
+        else await saveBroadcastRun({ ...broadcast, recipients });
+      }
+
+      await db.interestNotes.where('interestId').equals(id).delete();
+      await remove(db.interests, id);
+    },
+  );
 }
 
 /** Räumt den Papierkorb auf. Liefert die Anzahl der gelöschten Einträge. */

@@ -5,30 +5,15 @@
  * sie braucht, wandern sie nach oben (siehe CLAUDE.md).
  */
 
-import { useEffect, useMemo, useState } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { attachmentUrl, db } from '../../db/db';
-import { DEFAULT_SETTINGS, type ID, type Settings } from '../../types';
+import { useEffect, useState } from 'react';
+import { attachmentUrl } from '../../db/db';
+import type { ID } from '../../types';
 
-/**
- * Einstellungen reaktiv lesen. Solange nichts gespeichert ist (frische App),
- * gelten die Vorgabewerte — so hat die Oberfläche nie einen leeren Zustand.
- */
-export function useSettings(): Settings {
-  const stored = useLiveQuery(() => db.settings.get('singleton'), []);
-  return useMemo<Settings>(() => {
-    if (!stored) return DEFAULT_SETTINGS;
-    return {
-      ...DEFAULT_SETTINGS,
-      ...stored,
-      seller: { ...DEFAULT_SETTINGS.seller, ...stored.seller },
-      weight: { ...DEFAULT_SETTINGS.weight, ...stored.weight },
-      schedule: { ...DEFAULT_SETTINGS.schedule, ...stored.schedule },
-      modules: { ...DEFAULT_SETTINGS.modules, ...stored.modules },
-      id: 'singleton',
-    };
-  }, [stored]);
-}
+// Einstellungen reaktiv lesen — zentrale Quelle in src/db/useSettings.ts.
+// Dieses Modul braucht die Variante, die während des Ladens schon die
+// Vorgabewerte liefert (Oberfläche nie leer), plus `useSettingsLoaded` für
+// Formular-Vorbelegungen.
+export { useSettingsValues as useSettings, useSettingsLoaded } from '../../db/useSettings';
 
 /**
  * Objekt-URL zu einem Anhang. Gibt die URL beim Wechsel und beim Aufräumen

@@ -1,32 +1,107 @@
-# React + TypeScript + Vite
+# Cattery
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Cattery ist eine lokale, offlinefähige iPhone-App für die fortlaufende
+Dokumentation einer Russisch-Blau-Zucht. Sie bündelt Zuchttiere, Würfe,
+Gewichtsentwicklung, Warteliste, Termine, Dokumente, Verträge und Kosten in
+einer installierbaren Progressive Web App (PWA).
 
-Currently, two official plugins are available:
+Die App benötigt weder Konto noch Server. Alle persönlichen Daten liegen
+ausschließlich im Browser auf dem verwendeten Gerät.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Funktionen
 
-## React Compiler
+- Zuchttiere mit Gesundheitsdaten, Rolligkeitskalender und Zeitstrahl
+- Würfe, Geburtsprotokoll, Wehen-Timer und 12-Wochen-Fahrplan
+- schneller Wiege-Modus mit Verlauf, Durchschnitt und Warnstufen
+- Interessenten, Kontaktverlauf, Kitten-Zuordnung und WhatsApp-Einzelnachrichten
+- Termine mit In-App-Erinnerungen und Nachbereitung
+- fotografierte Dokumente mit Zuschnitt, Drehung und Offline-Vollbildansicht
+- Standardkaufvertrag und Vertrag mit einmaliger Zuchtnutzung als PDF
+- persönliche Kunden-Updates als teilbare Bildkarte
+- wurfbezogene Kostenübersicht
+- vollständige Datensicherung und Wiederherstellung als Datei
+- heller, dunkler und systemabhängiger Modus
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Lokal starten
 
-## Expanding the Oxlint configuration
+Voraussetzung ist Node.js 24 mit npm.
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm ci
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Vite zeigt anschließend die lokale Adresse an. Für eine produktionsnahe
+Prüfung:
+
+```bash
+npm run build
+npm run preview
+```
+
+## Qualitätsprüfung
+
+Der vollständige lokale Prüfablauf umfasst Linting, Typprüfung, Tests und
+Produktionsbau:
+
+```bash
+npm run check
+```
+
+Einzelne Schritte lassen sich auch separat ausführen:
+
+```bash
+npm run lint
+npm run typecheck
+npm test
+npm run build
+```
+
+Das aktuelle manuelle Prüfprotokoll steht in
+[`docs/PRUEFPROTOKOLL.md`](docs/PRUEFPROTOKOLL.md).
+
+## Veröffentlichung über GitHub Pages
+
+Der Workflow [`.github/workflows/pages.yml`](.github/workflows/pages.yml)
+prüft die App bei jedem Push auf `main`, baut sie und veröffentlicht den
+Ordner `dist`.
+
+1. Dieses Projekt in ein GitHub-Repository hochladen.
+2. In GitHub unter **Settings → Pages → Build and deployment → Source**
+   **GitHub Actions** auswählen.
+3. Einen Push auf `main` auslösen oder den Workflow manuell starten.
+4. Die veröffentlichte Seite auf dem iPhone in Safari öffnen und über
+   **Teilen → Zum Home-Bildschirm** installieren.
+
+Die App verwendet relative Dateipfade und Hash-Routing. Dadurch funktioniert
+sie auch unter einem Projektpfad wie `name.github.io/cattery-app/`.
+
+## Daten, Datenschutz und Sicherung
+
+- Es gibt keine Cloud-Synchronisierung. IndexedDB im Browser ist die einzige
+  laufende Datenbank.
+- Verkäuferdaten, Anschrift und IBAN werden erst auf dem Gerät eingegeben und
+  gehören niemals ins Repository.
+- Nach wichtigen Änderungen und spätestens bei der Erinnerung sollte unter
+  **Mehr → Einstellungen → Datensicherung** eine Sicherungsdatei erstellt und
+  in iCloud Drive oder an einem anderen sicheren Ort abgelegt werden.
+- Eine Wiederherstellung ersetzt den gesamten vorhandenen Datenbestand und
+  verlangt deshalb eine doppelte Bestätigung.
+- Beim Löschen der Browserdaten oder der App können lokale Daten verloren
+  gehen. Eine aktuelle Sicherungsdatei ist der verlässliche Schutz.
+
+## Projektunterlagen
+
+- [`docs/ANFORDERUNGEN.md`](docs/ANFORDERUNGEN.md) – fachliche Anforderungen
+- [`docs/FRAGENKATALOG.md`](docs/FRAGENKATALOG.md) – ursprüngliche Klärungsfragen
+- [`docs/UEBERGABE.md`](docs/UEBERGABE.md) – ausführlicher Entwicklungsstand
+- [`docs/vertrag-a.txt`](docs/vertrag-a.txt) und
+  [`docs/vertrag-b.txt`](docs/vertrag-b.txt) – Vertragsvorlagen mit Platzhaltern
+- [`docs/pawpeds-anleitung.md`](docs/pawpeds-anleitung.md) – externer
+  Ahnenverlust-Rechner
+
+## Rechtlicher Hinweis
+
+Die Vertrags-PDFs werden technisch aus den hinterlegten Vorlagen erzeugt.
+Vor einem realen Einsatz sollten Wortlaut, Platzhalter und die jeweils
+geltenden rechtlichen Anforderungen unabhängig fachkundig geprüft werden.

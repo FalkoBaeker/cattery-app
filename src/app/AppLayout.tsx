@@ -1,9 +1,9 @@
-import { Outlet, useLocation } from 'react-router-dom';
-import { useEffect } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
+import { Outlet, useLocation } from 'react-router';
+import { Suspense, useEffect } from 'react';
 import { TabBar } from './TabBar';
-import { db } from '../db/db';
 import { useReminderRunner } from '../features/appointments/notify';
+import { Spinner } from '../ui';
+import { useSettings } from '../db/useSettings';
 
 /**
  * Grundgerüst: Inhalt oben, Tab-Leiste unten.
@@ -17,10 +17,10 @@ import { useReminderRunner } from '../features/appointments/notify';
 export function AppLayout() {
   const { pathname } = useLocation();
 
-  const settings = useLiveQuery(() => db.settings.get('singleton'), []);
-  // Solange die Einstellungen noch laden, wird geprüft — ein verpasster
-  // Termin wiegt schwerer als ein überflüssiger Prüflauf.
-  const remindersEnabled = settings?.modules?.appointments !== false;
+  const settings = useSettings();
+  // Erst nach dem Laden starten: Ein bewusst ausgeschalteter Kalender darf
+  // auch beim App-Start keinen kurzen Prüflauf mehr anstoßen.
+  const remindersEnabled = settings?.modules.appointments === true;
   useReminderRunner(remindersEnabled);
 
   useEffect(() => {
@@ -29,7 +29,18 @@ export function AppLayout() {
 
   return (
     <div className="min-h-full">
-      <Outlet />
+      <Suspense
+        fallback={
+          <div
+            className="flex min-h-[60dvh] items-center justify-center text-text-faint"
+            aria-label="Bildschirm wird geladen"
+          >
+            <Spinner size={26} />
+          </div>
+        }
+      >
+        <Outlet />
+      </Suspense>
       <TabBar />
     </div>
   );

@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { Icon, List, ListRow, Screen, Spinner, Stack, type IconName } from '../../ui';
 import { useSettings } from '../settings/useSettings';
 import type { ModuleKey } from '../../types';

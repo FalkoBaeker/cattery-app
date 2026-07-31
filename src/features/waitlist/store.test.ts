@@ -173,6 +173,33 @@ describe('setReservedKitten', () => {
     expect((await db.interests.get(interest.id))?.kittenId).toBeUndefined();
     expect((await db.kittens.get(kitten.id))?.saleStatus).toBe('available');
   });
+
+  it('übergibt ein bereits vergebenes Kitten vollständig an den neuen Interessenten', async () => {
+    const anna = await createInterest({ name: 'Anna' });
+    const bernd = await createInterest({ name: 'Bernd' });
+    await setInterestStatus(anna, 'reserved');
+    await setInterestStatus(bernd, 'reserved');
+    const kitten = await makeKitten();
+
+    await setReservedKitten((await db.interests.get(anna.id))!, kitten.id);
+    await setReservedKitten((await db.interests.get(bernd.id))!, kitten.id);
+
+    expect((await db.interests.get(anna.id))?.kittenId).toBeUndefined();
+    expect((await db.interests.get(bernd.id))?.kittenId).toBe(kitten.id);
+    expect((await db.kittens.get(kitten.id))?.interestId).toBe(bernd.id);
+  });
+
+  it('behält eine gültige Reservierung bei einer unbekannten Kitten-Kennung', async () => {
+    const interest = await createInterest({ name: 'Anna' });
+    await setInterestStatus(interest, 'reserved');
+    const kitten = await makeKitten();
+    await setReservedKitten((await db.interests.get(interest.id))!, kitten.id);
+
+    await setReservedKitten((await db.interests.get(interest.id))!, 'nicht-mehr-da');
+
+    expect((await db.interests.get(interest.id))?.kittenId).toBe(kitten.id);
+    expect((await db.kittens.get(kitten.id))?.interestId).toBe(interest.id);
+  });
 });
 
 describe('setInterestStatus', () => {
@@ -241,6 +268,28 @@ describe('setInterestStatus', () => {
     const after = await db.interests.get(interest.id);
     expect(after?.deletedAt).toBeUndefined();
   });
+
+  it('stellt einen Rückkehrer aus dem Papierkorb unten an die Liste', async () => {
+    const anna = await createInterest({ name: 'Anna' });
+    await createInterest({ name: 'Bernd' });
+    await setInterestStatus(anna, 'declined');
+    // Während Anna im Papierkorb lag, kam Clara dazu — Annas alter
+    // sortIndex 0 könnte längst anders vergeben sein.
+    await createInterest({ name: 'Clara' });
+
+    const declined = (await db.interests.get(anna.id)) as Interest;
+    await setInterestStatus(declined, 'contacted');
+
+    const list = sortWaitlist((await db.interests.toArray()).filter((i) => !i.deletedAt));
+    expect(list.map((i) => i.name)).toEqual(['Bernd', 'Clara', 'Anna']);
+  });
+
+  it('vergibt beim gewöhnlichen Statuswechsel keinen neuen sortIndex', async () => {
+    const anna = await createInterest({ name: 'Anna' });
+    await createInterest({ name: 'Bernd' });
+    await setInterestStatus(anna, 'contacted');
+    expect((await db.interests.get(anna.id))?.sortIndex).toBe(0);
+  });
 });
 
 /* ================================================================== */
@@ -259,6 +308,29 @@ describe('Papierkorb', () => {
     const list = sortWaitlist((await db.interests.toArray()).filter((i) => !i.deletedAt));
     expect(list.map((i) => i.name)).toEqual(['B', 'C', 'A']);
     expect((await db.interests.get(a.id))?.deletedAt).toBeUndefined();
+  });
+
+  it('setzt einen abgesagten Eintrag beim Zurückholen auf „Kontakt aufgenommen"', async () => {
+    const a = await createInterest({ name: 'Anna' });
+    await setInterestStatus(a, 'declined');
+
+    await restoreInterest(a.id);
+
+    const after = await db.interests.get(a.id);
+    expect(after?.deletedAt).toBeUndefined();
+    // Nicht wieder „Abgesagt" — sonst stünde der zurückgeholte Eintrag mit
+    // rotem Kennzeichen auf der Liste, obwohl er gerade gerettet wurde.
+    expect(after?.status).toBe('contacted');
+  });
+
+  it('lässt beim Zurückholen jeden anderen Status in Ruhe', async () => {
+    const a = await createInterest({ name: 'Anna' });
+    await setInterestStatus(a, 'reserved');
+    await trashInterest(a.id);
+
+    await restoreInterest(a.id);
+
+    expect((await db.interests.get(a.id))?.status).toBe('reserved');
   });
 
   it('löscht beim endgültigen Löschen auch den Verlauf', async () => {
@@ -285,6 +357,89 @@ describe('Papierkorb', () => {
     await purgeInterest(a.id);
 
     expect((await db.appointments.get(appointment.id))?.interestId).toBeUndefined();
+  });
+
+  it('bewahrt historische Unterlagen und Verträge ohne tote Verweise', async () => {
+    const a = await createInterest({ name: 'Anna' });
+    const document = await insert(db.documents, {
+      kind: 'contract',
+      title: 'Kaufvertrag Anna',
+      interestId: a.id,
+      pageIds: [],
+      customerVisible: true,
+    });
+    const contract = await insert(db.contracts, {
+      type: 'standard',
+      interestId: a.id,
+      data: {
+        type: 'standard',
+        buyers: [{ name: 'Anna' }],
+        animals: [{ name: 'Mia', sex: 'female' }],
+        breed: 'Russisch Blau',
+      },
+    });
+
+    await purgeInterest(a.id);
+
+    expect((await db.documents.get(document.id))?.interestId).toBeUndefined();
+    expect((await db.documents.get(document.id))?.title).toBe('Kaufvertrag Anna');
+    expect((await db.contracts.get(contract.id))?.interestId).toBeUndefined();
+    expect((await db.contracts.get(contract.id))?.data.buyers[0].name).toBe('Anna');
+  });
+
+  it('gibt auch inkonsistent einseitig verknüpfte Kitten vollständig frei', async () => {
+    const a = await createInterest({ name: 'Anna' });
+    const reserved = await makeKitten({
+      collarColor: 'red',
+      interestId: a.id,
+      saleStatus: 'reserved',
+    });
+    const sold = await makeKitten({
+      collarColor: 'blue',
+      interestId: a.id,
+      saleStatus: 'sold',
+    });
+
+    await purgeInterest(a.id);
+
+    const reservedAfter = await db.kittens.get(reserved.id);
+    const soldAfter = await db.kittens.get(sold.id);
+    expect(reservedAfter?.interestId).toBeUndefined();
+    expect(reservedAfter?.saleStatus).toBe('available');
+    expect(soldAfter?.interestId).toBeUndefined();
+    expect(soldAfter?.saleStatus).toBe('available');
+  });
+
+  it('entfernt den Interessenten aus einer laufenden Sammelnachricht', async () => {
+    const a = await createInterest({ name: 'Anna' });
+    const b = await createInterest({ name: 'Bernd' });
+    await saveBroadcastRun({
+      startedAt: '2026-03-01T10:00:00.000Z',
+      text: 'Hallo {name}',
+      recipients: [
+        { interestId: a.id, name: a.name, phone: '0170 1111111' },
+        { interestId: b.id, name: b.name, phone: '0170 2222222' },
+      ],
+    });
+
+    await purgeInterest(a.id);
+
+    expect((await loadBroadcastRun())?.recipients).toEqual([
+      { interestId: b.id, name: b.name, phone: '0170 2222222' },
+    ]);
+  });
+
+  it('beendet eine Sammelnachricht, wenn ihr letzter Empfänger gelöscht wird', async () => {
+    const a = await createInterest({ name: 'Anna' });
+    await saveBroadcastRun({
+      startedAt: '2026-03-01T10:00:00.000Z',
+      text: 'Hallo {name}',
+      recipients: [{ interestId: a.id, name: a.name }],
+    });
+
+    await purgeInterest(a.id);
+
+    expect(await loadBroadcastRun()).toBeNull();
   });
 
   it('räumt nur auf, was älter als 30 Tage ist', async () => {

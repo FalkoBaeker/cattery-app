@@ -137,7 +137,22 @@ export function analyzeWeights(
 
   /* --- kritisch ---------------------------------------------------- */
 
-  if (gain && gain.value <= 0) {
+  // Der geglättete Mehrtageswert darf einen frischen Rückgang niemals
+  // verdecken. Beispiel: 100 → 130 → 129 g ist über mehrere Tage noch im
+  // Plus, seit der letzten Wiegung aber dennoch ein Gewichtsverlust.
+  if (lastChangeG != null && lastChangeG <= 0) {
+    level = 'critical';
+    reasons.push(
+      lastChangeG < 0
+        ? `Gewichtsverlust seit der letzten Wiegung: ${Math.abs(lastChangeG)} g.`
+        : 'Keine Zunahme seit der letzten Wiegung.',
+    );
+  }
+
+  // Zusätzlich bleibt ein negativer/stehender Trend über das gesamte
+  // Auswertefenster kritisch, auch wenn die jüngste Einzelmessung leicht
+  // aufgeholt hat.
+  if (gain && gain.value <= 0 && (lastChangeG == null || lastChangeG > 0)) {
     level = 'critical';
     reasons.push(
       gain.value < 0

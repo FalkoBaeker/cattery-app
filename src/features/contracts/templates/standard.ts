@@ -1,9 +1,19 @@
 /**
  * Vertrag A — Standardkaufvertrag, 8 Paragrafen.
  *
- * ACHTUNG: Der Wortlaut ist Rechtstext. Er wird nicht umformuliert,
- * gekürzt oder „verbessert". Änderungen nur nach Absprache mit der
- * Züchterin und nur am Wortlaut hier, nie im Code.
+ * Der Wortlaut stammt Zeichen für Zeichen aus docs/vertrag-a.txt —
+ * dem wortgetreu übernommenen Originalvertrag der Züchterin. Er wird
+ * nicht umformuliert, gekürzt oder „verbessert". Es werden ausschließlich
+ * Platzhalter gefüllt sowie die Grammatik-Schalter [EZ:…|MZ:…] und
+ * [K1M:…|K1W:…|KN:…] aufgelöst (siehe grammar.ts).
+ *
+ * Die Treue zur Textvorlage wird in vorlagen.test.ts automatisch
+ * gegen docs/vertrag-a.txt geprüft.
+ *
+ * Eine Abweichung ist bewusst: Die Vorlage schreibt im Titel
+ * „{{tierzahlWort}} [EZ:Kitten|MZ:{{tierzahlWort}} Kitten]" — in der
+ * Mehrzahl stünde das Zahlwort doppelt („zwei zwei Kitten"). Gemeint
+ * ist offensichtlich „Kaufvertrag über zwei Kitten"; so wird es gesetzt.
  *
  * § 8 (Unterlagen) ist in jedem Vertrag gleich.
  */
@@ -11,16 +21,19 @@
 import type { Vertragsvorlage } from './model';
 
 export const VERTRAG_STANDARD: Vertragsvorlage = {
-  titel: 'Kaufvertrag',
+  titel: 'Kaufvertrag über {tierzahlWort} Kitten der Rasse {rasse}',
 
   vorspann: [
-    { text: 'Zwischen' },
-    { text: '{vk.name}\n{vk.anschrift}\ngeboren am {vk.geburtsdatum}', block: true },
-    { text: '– nachfolgend {vk.nom} genannt –' },
+    { text: 'zwischen' },
+    {
+      block: true,
+      text: 'Verkäuferin:\nName: {vk.name}\nAnschrift: {vk.anschrift}\nGeb.-Datum: {vk.gebDatum}',
+    },
     { text: 'und' },
-    { text: '{kaeufer.liste}', block: true },
-    { text: '– nachfolgend {kaeufer.nom} genannt –' },
-    { text: 'wird folgender Kaufvertrag geschlossen:' },
+    {
+      block: true,
+      text: '[K1M:Käufer|K1W:Käuferin|KN:Käufer]:\nName: {kaeufer.name}\nAnschrift: {kaeufer.anschrift}\nGeb. am: {kaeufer.gebDatum}',
+    },
   ],
 
   paragrafen: [
@@ -28,140 +41,97 @@ export const VERTRAG_STANDARD: Vertragsvorlage = {
       titel: 'Vertragsgegenstand',
       absaetze: [
         {
-          text: '{Vk.nom} verkauft {kaeufer.dat} {tier.zahlAkk} {tier.wortAkk} der Rasse {rasse}.',
+          text: 'Die Verkäuferin veräußert {tierzahlWort} [EZ:reinrassiges|MZ:reinrassige] {rasse}-Kitten.',
         },
-        { text: '{tier.liste}', block: true },
-        { text: '{Tier.nom} {tier.wurde} am {geburtsdatum} geboren.' },
+        { block: true, text: '{tiere.liste}\nGeboren am: {gebDatum}' },
         {
-          text: '{Tier.nom} {tier.wird} aus der Zucht {vk.gen} abgegeben und {tier.ist} beim Verein {verein} eingetragen.',
+          text: '[EZ:Das Kitten ist|MZ:Die Kitten sind] bis zum Übergabetermin mindestens zweifach geimpft, kastriert, mehrfach entwurmt und [EZ:wurde|MZ:wurden] tierärztlich untersucht. Ein tierärztliches Attest wird vor Abgabe zur Einsicht vorgelegt. Je ein Stammbaum des Zuchtvereins {verein} wird mitgegeben.',
         },
       ],
     },
 
     {
-      titel: 'Kaufpreis und Zahlung',
+      titel: 'Kaufpreis & Zahlungsbedingungen',
       absaetze: [
-        { text: 'Der Kaufpreis beträgt insgesamt {preis}.' },
+        { wenn: ['ohneAnzahlung'], block: true, text: 'Gesamtkaufpreis: {preis}' },
         {
           wenn: ['mitAnzahlung'],
-          text: '{Kaeufer.nom} {kaeufer.hat} eine Anzahlung in Höhe von {anzahlung} geleistet. Die Anzahlung wird auf den Kaufpreis angerechnet. Der Restbetrag von {restsumme} ist spätestens bei der Übergabe zu entrichten.',
+          block: true,
+          text: 'Gesamtkaufpreis: {preis}\nAnzahlung: {anzahlung} geleistet\nRestsumme: {restsumme}',
+        },
+        {
+          wenn: ['mitAnzahlung'],
+          text: 'Die Restsumme wird vor Abholung auf das Konto von {vk.name}: {vk.iban} überwiesen.',
         },
         {
           wenn: ['ohneAnzahlung'],
-          text: 'Der Kaufpreis ist spätestens bei der Übergabe zu entrichten.',
-        },
-        {
-          text: 'Die Zahlung erfolgt in bar bei der Übergabe oder vorab durch Überweisung auf folgendes Konto:',
-        },
-        {
-          wenn: ['mitIban'],
-          block: true,
-          text: 'Kontoinhaberin: {vk.name}\nIBAN: {vk.iban}\nVerwendungszweck: {verwendungszweck}',
-        },
-        {
-          text: 'Das Eigentum {tier.gen} geht erst mit der vollständigen Bezahlung des Kaufpreises auf {kaeufer.akk} über.',
-        },
-        {
-          wenn: ['mehrereKaeufer'],
-          text: 'Mehrere Käufer schulden den Kaufpreis als Gesamtschuldner.',
+          text: 'Die Kaufsumme wird vor Abholung auf das Konto von {vk.name}: {vk.iban} überwiesen.',
         },
       ],
     },
 
     {
-      titel: 'Übergabe',
-      absaetze: [
-        { text: 'Die Übergabe erfolgt voraussichtlich {uebergabe} in {uebergabeort}.' },
-        {
-          text: '{Tier.nom} {tier.wird} frühestens im Alter von zwölf Wochen abgegeben. Bis zur Übergabe {tier.bleibt} {tier.nom} in der Obhut {vk.gen}, die für Unterbringung, Fütterung und tierärztliche Versorgung sorgt.',
-        },
-        {
-          text: 'Mit der Übergabe gehen Besitz, Gefahr und Unterhaltspflicht auf {kaeufer.akk} über.',
-        },
-      ],
-    },
-
-    {
-      titel: 'Gesundheitszustand',
+      titel: 'Übergabe & Gefahrübergang',
       absaetze: [
         {
-          text: '{Tier.nom} {tier.ist} bei der Übergabe nach dem Kenntnisstand {vk.gen} gesund, mehrfach entwurmt, zweimal geimpft und mit einem Mikrochip gekennzeichnet.',
-        },
-        {
-          text: '{Kaeufer.nom} {kaeufer.hat} Gelegenheit, {tier.akk} vor der Übergabe zu sehen und den Gesundheitszustand zu prüfen. Ein tierärztliches Gesundheitszeugnis wird auf Wunsch zur Einsicht vorgelegt.',
-        },
-        {
-          text: '{Vk.nom} versichert, dass ihr Erbkrankheiten der Elterntiere nicht bekannt sind. Die Elterntiere sind auf HCM und PKD untersucht.',
+          text: 'Übergabeort: {uebergabeOrt} - am: {uebergabeTermin} oder nach Vereinbarung. Mit Übergabe und vollständiger Kaufpreiszahlung gehen Besitz und Gefahr auf [K1M:den Käufer|K1W:die Käuferin|KN:die Käufer] über.',
         },
       ],
     },
 
     {
-      titel: 'Haltung',
+      titel: 'Gesundheitsstatus & Rügepflicht',
       absaetze: [
         {
-          text: '{Kaeufer.nom} {kaeufer.verpflichtetSich}, {tier.akk} artgerecht zu halten, ausgewogen zu ernähren und bei Krankheit unverzüglich tierärztlich behandeln zu lassen.',
+          text: '[EZ:Das Kitten wurde|MZ:Die Kitten wurden] von [K1M:dem Käufer|K1W:der Käuferin|KN:den Käufern] am Tag der Abholung besichtigt und in gesundem, augenscheinlich mangelfreiem Zustand übernommen.',
         },
         {
-          text: '{Tier.nom} {tier.wird} in Wohnungshaltung oder in gesichertem Freigang gehalten. Ungesicherter Freigang an Straßen ist nicht gestattet.',
+          text: 'Offenkundige Mängel sind binnen 48 Stunden schriftlich anzuzeigen; versteckte Mängel unverzüglich nach Entdeckung.',
         },
         {
-          text: '{Kaeufer.nom} {kaeufer.verpflichtetSich}, {vk.akk} zu benachrichtigen, falls {tier.nom} aus wichtigem Grund abgegeben werden soll. {Vk.nom} hat in diesem Fall ein Vorkaufsrecht zum dann üblichen Preis.',
+          text: 'Beim Privatverkauf sind weitergehende Gewährleistungsrechte ausdrücklich ausgeschlossen, soweit gesetzlich zulässig (§ 444 BGB).',
         },
       ],
     },
 
     {
-      titel: 'Zucht und Kastration',
+      titel: 'Pflichten [K1M:des Käufers|K1W:der Käuferin|KN:der Käufer]',
       absaetze: [
         {
-          text: '{Tier.nom} {tier.wird} ausschließlich als Liebhabertier abgegeben. Eine Verwendung zur Zucht ist ausgeschlossen.',
-        },
-        {
-          text: '{Kaeufer.nom} {kaeufer.verpflichtetSich}, {tier.akk} kastrieren zu lassen, sofern die Kastration nicht bereits vor der Übergabe erfolgt ist.',
+          text: '[K1M:Der Käufer verpflichtet sich|K1W:Die Käuferin verpflichtet sich|KN:Die Käufer verpflichten sich], die [EZ:Katze|MZ:Katzen] jederzeit art- und tierschutzgerecht zu halten und [EZ:ihr|MZ:ihnen] eine liebevolle, [EZ:ihrer|MZ:ihrer] Rasse angemessene Versorgung zukommen zu lassen. [K1M:Er versichert|K1W:Sie versichert|KN:Sie versichern] ferner, die [EZ:Katze|MZ:Katzen] weder zu misshandeln noch zu vernachlässigen und [EZ:sie|MZ:sie] insbesondere nicht in ein Tierheim abzugeben. Die von der Verkäuferin erteilten Fütterungsempfehlungen [K1M:hat der Käufer|K1W:hat die Käuferin|KN:haben die Käufer] erhalten, zur Kenntnis genommen und [K1M:verpflichtet sich|K1W:verpflichtet sich|KN:verpflichten sich], diese bei der Ernährung der [EZ:Katze|MZ:Katzen] angemessen zu berücksichtigen. Bei Erkrankung ist eine tierärztliche Versorgung jederzeit sicherzustellen.',
         },
       ],
     },
 
     {
-      titel: 'Gewährleistung',
+      titel: 'Haftungsausschluss',
       absaetze: [
         {
-          text: '{Tier.nom} {tier.wird} als lebendes Tier verkauft. Eine Gewähr für Gesundheit, Charakter, Fellfarbe, Fellqualität, Größe oder Zuchttauglichkeit wird nicht übernommen.',
-        },
-        {
-          text: 'Ansprüche wegen später auftretender Erkrankungen sind ausgeschlossen, soweit {vk.nom} einen Mangel nicht arglistig verschwiegen hat.',
-        },
-        {
-          text: 'Mündliche Nebenabreden bestehen nicht. Änderungen und Ergänzungen dieses Vertrages bedürfen der Textform.',
+          text: 'Für leichte Fahrlässigkeit haftet die Verkäuferin – außer bei Verletzung von Leben, Körper oder Gesundheit – nicht. Die Haftung für Vorsatz und grobe Fahrlässigkeit bleibt unberührt.',
         },
       ],
     },
 
     {
-      titel: 'Unterlagen',
+      titel: 'Salvatorische Klausel',
       absaetze: [
-        { text: 'Mit der Übergabe {kaeufer.erhaelt} {kaeufer.nom} folgende Unterlagen:' },
         {
-          block: true,
-          text: '– den Impfpass mit eingetragener Chipnummer,\n– die Ahnentafel des Vereins; liegt sie noch nicht vor, wird sie nachgereicht,\n– den Nachweis der Entwurmungen,\n– Angaben zur bisherigen Fütterung.',
-        },
-        {
-          text: 'Die Ahnentafel bleibt bis zur vollständigen Bezahlung des Kaufpreises Eigentum {vk.gen}.',
+          text: 'Sollten einzelne Bestimmungen dieses Vertrags unwirksam sein oder werden, bleibt die Wirksamkeit der übrigen Regelungen unberührt. Die Parteien verpflichten sich, eine wirtschaftlich möglichst gleichwertige, zulässige Ersatzregelung zu vereinbaren.',
         },
       ],
     },
 
     {
-      titel: 'Individuelle Vereinbarungen',
+      titel: 'Unterlagen (bei Übergabe ausgehändigt):',
+      absaetze: [{ block: true, text: '- EU Heimtierausweis\n- Stammbaum' }],
+    },
+
+    {
+      titel: 'Ergänzende Vereinbarungen',
       wenn: ['zusatz'],
       absaetze: [{ text: '{zusatz}' }],
     },
   ],
 
-  nachspann: [
-    {
-      text: 'Beide Vertragsparteien haben diesen Vertrag gelesen und erhalten je eine unterschriebene Ausfertigung.',
-    },
-  ],
+  nachspann: [],
 };

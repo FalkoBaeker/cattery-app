@@ -82,6 +82,29 @@ describe('analyzeWeights', () => {
     expect(a.reasons.join(' ')).toContain('Gewichtsverlust');
   });
 
+  it('lässt einen frischen Verlust nicht von einer positiven Mehrtagesrate verdecken', () => {
+    const a = analyzeWeights([w(0, 100), w(1, 130), w(2, 129)], T);
+    expect(a.lastChangeG).toBe(-1);
+    expect(a.gainPerDay).toBeGreaterThan(0);
+    expect(a.level).toBe('critical');
+    expect(a.reasons.join(' ')).toContain('seit der letzten Wiegung');
+  });
+
+  it('meldet auch unmittelbaren Stillstand trotz zuvor guter Zunahme', () => {
+    const a = analyzeWeights([w(0, 100), w(1, 130), w(2, 130)], T);
+    expect(a.lastChangeG).toBe(0);
+    expect(a.level).toBe('critical');
+    expect(a.reasons.join(' ')).toContain('Keine Zunahme seit der letzten Wiegung');
+  });
+
+  it('behält einen negativen Mehrtagetrend trotz jüngster Erholung als kritisch', () => {
+    const a = analyzeWeights([w(0, 130), w(1, 100), w(2, 101)], T);
+    expect(a.lastChangeG).toBe(1);
+    expect(a.gainPerDay).toBeLessThan(0);
+    expect(a.level).toBe('critical');
+    expect(a.reasons.join(' ')).toContain('Gewichtsverlust');
+  });
+
   it('stuft Stillstand als kritisch ein', () => {
     const a = analyzeWeights([w(0, 120), w(2, 120)], T);
     expect(a.level).toBe('critical');

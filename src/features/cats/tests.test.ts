@@ -6,6 +6,7 @@ import {
   healthTestGroupKey,
   healthTestStatus,
   healthTestTitle,
+  healthTestValidityLine,
   summarizeHealthTests,
 } from './tests';
 
@@ -226,5 +227,32 @@ describe('summarizeHealthTests', () => {
       '2026-03-01',
     );
     expect(s.groups[0].latest.id).toBe('spaet');
+  });
+});
+
+describe('healthTestValidityLine', () => {
+  it('nennt Gültigkeit und gerechnete Fälligkeit', () => {
+    expect(healthTestValidityLine({ date: '2026-01-01', validMonths: 6 })).toBe(
+      '6 Monate gültig · nächste Fälligkeit 01.07.2026',
+    );
+  });
+
+  it('beherrscht Singular und Monatsende', () => {
+    // 31.08. + 6 Monate landet auf dem letzten Februartag.
+    expect(healthTestValidityLine({ date: '2025-08-31', validMonths: 6 })).toBe(
+      '6 Monate gültig · nächste Fälligkeit 28.02.2026',
+    );
+    expect(healthTestValidityLine({ date: '2026-01-01', validMonths: 1 })).toBe(
+      '1 Monat gültig · nächste Fälligkeit 01.02.2026',
+    );
+  });
+
+  it('schweigt bei unbefristeten Ergebnissen', () => {
+    expect(healthTestValidityLine({ date: '2026-01-01', validMonths: 0 })).toBeUndefined();
+    expect(healthTestValidityLine({ date: '2026-01-01' })).toBeUndefined();
+  });
+
+  it('lässt die Fälligkeit weg, wenn das Datum unbrauchbar ist', () => {
+    expect(healthTestValidityLine({ date: '' as never, validMonths: 6 })).toBe('6 Monate gültig');
   });
 });

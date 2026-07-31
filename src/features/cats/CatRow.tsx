@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Badge, ListRow } from '../../ui';
 import { db } from '../../db/db';

@@ -26,6 +26,14 @@ export const MIN_CYCLES_FOR_PREDICTION = 3;
  * Beginnt ein Eintrag höchstens so viele Tage nach dem Ende (bzw. Beginn) des
  * vorigen, gilt er als derselbe Vorgang — sie hat doppelt eingetragen oder
  * die Rolligkeit über zwei Einträge dokumentiert.
+ *
+ * Bewusst mehr als „nur echte Überlappung": Ein Interöstrus (Pause zwischen
+ * zwei Rolligkeiten) dauert bei der Katze in der Regel mindestens etwa eine
+ * Woche. Zwei bis drei ruhige Tage mitten in einer Rolligkeit kommen dagegen
+ * vor — solche Einträge als zwei getrennte Rolligkeiten zu werten, würde die
+ * Zyklus-Statistik mit Mini-Abständen verfälschen. Drei Tage Lücke sind also
+ * praktisch immer dieselbe Rolligkeit; ein echter (seltener, kurzer)
+ * Interöstrus von unter vier Tagen ist dafür verschmerzbar.
  */
 export const SAME_HEAT_GAP_DAYS = 3;
 
@@ -277,7 +285,8 @@ export function lastHeatSummary(
   if (since == null || !Number.isFinite(since)) return `Letzte Rolligkeit am ${date}.`;
   if (since < 0) return `Letzte Rolligkeit am ${date} — das Datum liegt in der Zukunft.`;
   if (since === 0) return `Letzte Rolligkeit: heute begonnen (${date}).`;
-  return `Letzte Rolligkeit vor ${days(since)} (${date}).`;
+  // Nach „vor" steht der Dativ: „vor 18 Tagen", nicht „vor 18 Tage".
+  return `Letzte Rolligkeit vor ${since} ${since === 1 ? 'Tag' : 'Tagen'} (${date}).`;
 }
 
 function buildSummary(

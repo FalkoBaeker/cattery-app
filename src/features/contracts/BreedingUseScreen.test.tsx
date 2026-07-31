@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router';
 
 import { ConfirmProvider, ToastProvider } from '../../ui';
 import { db, insert, wipeDatabase } from '../../db/db';
@@ -85,6 +85,18 @@ describe('Zuchtnutzungs-Vorgang', () => {
       expect(text).toMatch(/1\.380,00/);
       expect(text).toMatch(/14 Tagen/);
     });
+  });
+
+  it('behält Geldbetrag und Zahlungsfrist, wenn der Vertrag bewusst gelöscht wurde', async () => {
+    const v = await vorgangMitStart(0);
+    await db.contracts.delete(v.contractId);
+
+    zeichne(v.id);
+
+    expect(await screen.findByText('Vertrag wurde gelöscht')).toBeInTheDocument();
+    const text = (await screen.findByText(/entfällt der/)).textContent ?? '';
+    expect(text).toMatch(/1\.380,00/);
+    expect(text).toMatch(/14 Tagen/);
   });
 
   it('warnt drei Monate vor Ablauf', async () => {

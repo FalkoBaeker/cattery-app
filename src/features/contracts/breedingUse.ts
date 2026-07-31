@@ -15,6 +15,12 @@ import {
   VORGABE_NUTZUNGSMONATE,
   VORGABE_VERLAENGERUNGSMONATE,
 } from './calc';
+import { tierNamen } from './helpers';
+
+function vorgangsName(contract: Contract): string {
+  const name = tierNamen(contract.data);
+  return name === 'ohne Tier' ? 'Katze' : name;
+}
 
 /* ------------------------------------------------------------------ */
 /*  Statuskette                                                        */
@@ -38,7 +44,7 @@ export function istBeendet(stage: BreedingUseStage): boolean {
 }
 
 /**
- * Ab „kastriert" ist die Zuchtnutzung durchgeführt — der Preisnachlass
+ * Ab „Wurf da" ist die Zuchtnutzung durchgeführt — der Preisnachlass
  * ist damit endgültig verdient und die Frist spielt keine Rolle mehr.
  */
 export function zuchtnutzungErfuellt(stage: BreedingUseStage): boolean {
@@ -92,11 +98,13 @@ export async function vorgangAnlegen(contract: Contract): Promise<BreedingUse | 
     contractId: contract.id,
     catId: tier?.catId,
     kittenId: tier?.kittenId,
-    catName: tier?.name?.trim() || 'Katze',
+    catName: vorgangsName(contract),
     startDate,
     months,
     extensionMonths,
     deadlineDate: fristende(startDate, months),
+    discountCents: contract.data.discountCents,
+    backPaymentDays: contract.data.backPaymentDays,
     stage: 'at_buyer',
     history: [{ stage: 'at_buyer', at: nowISO(), note: 'Vorgang aus dem Vertrag angelegt' }],
   });
@@ -120,11 +128,13 @@ export async function vorgangAusVertragAktualisieren(contract: Contract): Promis
   await patch(db.breedingUses, vorgang.id, {
     catId: tier?.catId,
     kittenId: tier?.kittenId,
-    catName: tier?.name?.trim() || vorgang.catName,
+    catName: vorgangsName(contract),
     startDate,
     months,
     extensionMonths,
     deadlineDate: fristende(startDate, months),
+    discountCents: contract.data.discountCents,
+    backPaymentDays: contract.data.backPaymentDays,
   });
 }
 

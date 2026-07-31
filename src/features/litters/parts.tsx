@@ -3,7 +3,7 @@
  * Sobald ein zweites Modul einen davon benötigt, wandert er nach src/ui/.
  */
 
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 import {
   Badge,
   ColorDot,
@@ -130,10 +130,14 @@ export function DateInput({
   max?: string;
   min?: string;
 }) {
+  const id = useId();
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="px-1 text-[0.85rem] font-medium text-text-dim">{label}</span>
+      <label htmlFor={id} className="px-1 text-[0.85rem] font-medium text-text-dim">
+        {label}
+      </label>
       <input
+        id={id}
         type="date"
         value={value ?? ''}
         max={max}

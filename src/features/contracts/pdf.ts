@@ -8,7 +8,7 @@
  */
 
 import type { jsPDF } from 'jspdf';
-import { db, patch, putAttachment } from '../../db/db';
+import { db, patch, putAttachment, remove } from '../../db/db';
 import { todayISO } from '../../lib/date';
 import type { Contract, ID } from '../../types';
 import type { GesetzterVertrag } from './render';
@@ -238,7 +238,7 @@ export async function pdfAmVertragSpeichern(contract: Contract, blob: Blob): Pro
   const alt = contract.pdfAttachmentId;
   await patch(db.contracts, contract.id, { pdfAttachmentId: anhang.id });
   if (alt && alt !== anhang.id) {
-    await db.attachments.delete(alt);
+    await remove(db.attachments, alt);
   }
   return anhang.id;
 }

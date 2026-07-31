@@ -8,7 +8,9 @@ import {
   contractionStats,
   countdownLabel,
   dueDateFromMating,
+  effectiveDueDate,
   formatDuration,
+  weighingStatus,
   groupTasksByWeek,
   isLivingKitten,
   nextOpenTask,
@@ -86,6 +88,22 @@ describe('dueDateFromMating', () => {
     expect(dueDateFromMating(undefined)).toBeUndefined();
     expect(dueDateFromMating(null)).toBeUndefined();
     expect(dueDateFromMating('2026-03-01', Number.NaN)).toBeUndefined();
+  });
+});
+
+describe('effectiveDueDate', () => {
+  it('bevorzugt den gespeicherten Termin', () => {
+    expect(
+      effectiveDueDate({ dueDate: '2026-05-01', matingDate: '2026-02-01' }, 65),
+    ).toBe('2026-05-01');
+  });
+
+  it('fällt auf den errechneten Termin zurück', () => {
+    expect(effectiveDueDate({ matingDate: '2026-02-01' }, 65)).toBe('2026-04-07');
+  });
+
+  it('bleibt ohne beides leer', () => {
+    expect(effectiveDueDate({})).toBeUndefined();
   });
 });
 
@@ -220,6 +238,42 @@ describe('summarizeLitter', () => {
     expect(s.alive).toBe(0);
     expect(s.allWeighedToday).toBe(false);
     expect(weighingLine(s)).toBe('Nichts zu wiegen');
+  });
+});
+
+describe('weighingStatus', () => {
+  const ref = '2026-03-10';
+
+  it('mahnt in der Wiegephase, wenn heute noch keiner gewogen wurde', () => {
+    const s = summarizeLitter([k('a'), k('b')], [], ref);
+    // Geburt vor 2 Wochen — mitten in der Wiegephase.
+    const status = weighingStatus(s, '2026-02-24', ref);
+    expect(status?.tone).toBe('warn');
+    expect(status?.text).toBe('Heute noch nicht gewogen (2)');
+  });
+
+  it('lobt, wenn heute alle gewogen sind', () => {
+    const s = summarizeLitter(
+      [k('a')],
+      [{ kittenId: 'a', at: '2026-03-10T08:00:00.000Z' }],
+      ref,
+    );
+    const status = weighingStatus(s, '2026-02-24', ref);
+    expect(status?.tone).toBe('ok');
+    expect(status?.text).toBe('Heute alle gewogen');
+  });
+
+  it('erklärt ab Woche 5 neutral, warum nicht mehr gewogen wird', () => {
+    const s = summarizeLitter([k('a')], [], ref);
+    // Geburt vor 6 Wochen — Wiegephase vorbei, aber kein wortloses Verschwinden.
+    const status = weighingStatus(s, '2026-01-27', ref);
+    expect(status?.tone).toBe('neutral');
+    expect(status?.text).toBe('Ab Woche 5 kein Routinewiegen mehr');
+  });
+
+  it('schweigt ohne Kitten oder ohne Geburtsdatum', () => {
+    expect(weighingStatus(summarizeLitter([], [], ref), '2026-02-24', ref)).toBeUndefined();
+    expect(weighingStatus(summarizeLitter([k('a')], [], ref), undefined, ref)).toBeUndefined();
   });
 });
 

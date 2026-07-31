@@ -1109,7 +1109,9 @@ function BackupSheet({
       toast.success('Sicherung eingespielt.');
       onClose();
     } catch {
-      toast.error('Das Einspielen ist fehlgeschlagen. Die Daten sind womöglich unvollständig.');
+      // Die Wiederherstellung läuft als Alles-oder-nichts-Transaktion —
+      // schlägt sie fehl, bleiben die bisherigen Daten unangetastet.
+      toast.error('Das Einspielen ist fehlgeschlagen. Die bisherigen Daten sind unverändert.');
     } finally {
       setProgress(null);
     }

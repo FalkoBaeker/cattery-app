@@ -3,6 +3,7 @@ import { DEFAULT_SETTINGS } from '../../types';
 import {
   analyzeKitten,
   dayOfLife,
+  dayOfLifeLabel,
   dayProgress,
   deltaToPrevious,
   latestDelta,
@@ -177,6 +178,24 @@ describe('previousSample / deltaToPrevious', () => {
     expect(latestDelta([sample(2026, 3, 3, 8, 92)])).toBeUndefined();
     expect(latestDelta([])).toBeUndefined();
   });
+
+  it('gibt bei exakt gleichem Zeitstempel der zweiten Messung eine Vorgängerin', () => {
+    // Zwei Messungen zum selben Zeitpunkt (z. B. Nachtrag mit derselben Uhrzeit):
+    // die zweite darf nicht als „erste" erscheinen.
+    const zeitpunkt = at(2026, 3, 4, 8);
+    const d = deltaToPrevious([{ at: zeitpunkt, grams: 105 }], zeitpunkt, 108);
+    expect(d?.grams).toBe(3);
+    expect(d?.hours).toBe(0);
+    expect(d?.perDay).toBeUndefined();
+
+    // Auch die jüngste Messung findet ihre zeitgleiche Zwillingsmessung.
+    const zwilling = latestDelta([
+      sample(2026, 3, 3, 8, 92),
+      { at: zeitpunkt, grams: 105 },
+      { at: zeitpunkt, grams: 108 },
+    ]);
+    expect(zwilling?.grams).toBe(3);
+  });
 });
 
 /* ------------------------------------------------------------------ */
@@ -223,6 +242,20 @@ describe('dayOfLife', () => {
 
   it('ist ohne Geburtsdatum undefined', () => {
     expect(dayOfLife(undefined, '2026-03-03')).toBeUndefined();
+  });
+});
+
+describe('dayOfLifeLabel', () => {
+  it('beschriftet normale Lebenstage', () => {
+    expect(dayOfLifeLabel('2026-03-03', '2026-03-15')).toBe('Tag 12');
+  });
+
+  it('sagt bei Geburtsdatum in der Zukunft „Noch nicht geboren" statt „Tag -5"', () => {
+    expect(dayOfLifeLabel('2026-08-05', '2026-07-31')).toBe('Noch nicht geboren');
+  });
+
+  it('benennt das fehlende Geburtsdatum', () => {
+    expect(dayOfLifeLabel(undefined, '2026-03-03')).toBe('Ohne Geburtsdatum');
   });
 });
 

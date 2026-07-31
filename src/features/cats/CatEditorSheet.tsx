@@ -18,10 +18,11 @@ import {
 import { db, insert, patch, putAttachment, remove } from '../../db/db';
 import { CAT_STATUS_LABEL, type Cat, type CatStatus, type ID, type Sex } from '../../types';
 import { todayISO } from '../../lib/date';
-import { useSettings } from './hooks';
+import { useSettings, useSettingsLoaded } from './hooks';
 import { CatAvatar } from './CatAvatar';
 import { downscaleImage } from './image';
 import { inbreedingError } from './format';
+import { CatHasLittersError, deleteCatWithReferences } from './store';
 
 /* ------------------------------------------------------------------ */
 /*  Formularzustand                                                    */
@@ -131,6 +132,7 @@ export function CatEditorSheet({
   onDeleted,
 }: CatEditorSheetProps) {
   const settings = useSettings();
+  const settingsLoaded = useSettingsLoaded();
   const toast = useToast();
   const confirm = useConfirm();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -180,20 +182,32 @@ export function CatEditorSheet({
         setPercentError(undefined);
         createdAttachments.current = [];
         setLoadedFor(sessionKey);
+      } else if (cat === null) {
+        // Auch der „nicht gefunden"-Zustand ist vollständig geladen.
+        setLoadedFor(sessionKey);
       }
       return;
     }
+    // Die Rasse wird aus den Einstellungen *übernommen* — also erst vorbelegen,
+    // wenn sie wirklich geladen sind. Sonst steht hier der Vorgabewert
+    // „Russisch Blau", obwohl etwas anderes eingestellt ist.
+    if (!settingsLoaded) return;
     setForm(emptyForm(settings.breed, defaultSex));
     setNameError(undefined);
     setPercentError(undefined);
     createdAttachments.current = [];
     setLoadedFor(sessionKey);
-  }, [open, sessionKey, loadedFor, catId, cat, settings.breed, defaultSex]);
+  }, [open, sessionKey, loadedFor, catId, cat, settingsLoaded, settings.breed, defaultSex]);
 
   const set = <K extends keyof CatForm>(key: K, value: CatForm[K]) =>
     setForm((f) => ({ ...f, [key]: value }));
 
-  const loading = Boolean(catId) && cat === undefined;
+  // Beim Anlegen zusätzlich auf die Einstellungen warten (Rassen-Vorbelegung).
+  // Erst zeichnen, nachdem der Effekt den Formularzustand für genau diese
+  // Öffnung übernommen hat. Sonst kann eine sehr schnelle Eingabe noch vom
+  // nachlaufenden Initialisierungseffekt überschrieben werden.
+  const loading =
+    (catId ? cat === undefined : !settingsLoaded) || loadedFor !== sessionKey;
   const missing = Boolean(catId) && cat === null;
 
   /* --- Foto -------------------------------------------------------- */
@@ -332,7 +346,7 @@ export function CatEditorSheet({
     const ok = await confirm({
       title: `${cat.callName} löschen?`,
       message:
-        'Rolligkeiten, Gesundheitstests und Gewichte dieser Katze werden mitgelöscht. Das lässt sich nicht rückgängig machen.',
+        'Rolligkeiten, Gesundheitstests, Gewichte und offene Aufgaben werden mitgelöscht. Historische Einträge bleiben erhalten, ihre Verknüpfung zur Katze wird gelöst. Das lässt sich nicht rückgängig machen.',
       confirmLabel: 'Löschen',
       danger: true,
     });
@@ -340,29 +354,21 @@ export function CatEditorSheet({
 
     setBusy(true);
     try {
-      const photoId = cat.photoAttachmentId;
-      await db.transaction(
-        'rw',
-        db.cats,
-        db.heatCycles,
-        db.healthTests,
-        db.catWeights,
-        db.attachments,
-        async () => {
-          await db.heatCycles.where('catId').equals(catId).delete();
-          await db.healthTests.where('catId').equals(catId).delete();
-          await db.catWeights.where('catId').equals(catId).delete();
-          await db.cats.delete(catId);
-          // Das Foto hängt nur an dieser Katze — sonst bleibt der Blob liegen.
-          if (photoId) await db.attachments.delete(photoId);
-        },
-      );
+      await deleteCatWithReferences(cat);
       toast.success(`${cat.callName} gelöscht.`);
       onDeleted?.(catId);
       await dropSessionAttachments();
       onClose();
-    } catch {
-      toast.error('Löschen fehlgeschlagen.');
+    } catch (error) {
+      if (error instanceof CatHasLittersError) {
+        toast.error(
+          `${cat.callName} hängt an ${error.litterCount} ${
+            error.litterCount === 1 ? 'Wurf' : 'Würfen'
+          } und kann nicht gelöscht werden.`,
+        );
+      } else {
+        toast.error('Löschen fehlgeschlagen.');
+      }
     } finally {
       setBusy(false);
     }
@@ -377,7 +383,16 @@ export function CatEditorSheet({
       tall
       title={catId ? 'Stammdaten bearbeiten' : 'Neues Zuchttier'}
       footer={
-        <Button block size="lg" variant="primary" onClick={save} loading={busy} disabled={loading}>
+        <Button
+          block
+          size="lg"
+          variant="primary"
+          onClick={save}
+          loading={busy}
+          /* `missing`: die Katze gibt es nicht mehr — ein aktiver Knopf, der
+             nichts Sichtbares tut, wäre nur verwirrend. */
+          disabled={loading || missing}
+        >
           Speichern
         </Button>
       }

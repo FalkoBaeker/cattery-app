@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router';
 import { useLiveQuery } from 'dexie-react-hooks';
 import type { ID, ISODateTime, Kitten, WeightEntry } from '../../types';
 import { COLLAR_COLORS, DEFAULT_SETTINGS, collarColor, kittenLabel } from '../../types';
@@ -43,7 +43,7 @@ import { formatGainG, formatGainPerDay, formatGrams, formatPercent } from '../..
 import { WEIGHT_LEVEL_TONE, type WeightLevel } from '../../domain/weight';
 import {
   analyzeKitten,
-  dayOfLife,
+  dayOfLifeLabel,
   dayProgress,
   deltaToPrevious,
   latestDelta,
@@ -328,9 +328,10 @@ export function WeighScreen() {
 
   const { litter, mother, alive, hidden, progress } = view;
   const birthDate = litter.birthDate;
-  const day = dayOfLife(birthDate, refDate);
+  // „Tag 12" oder „Noch nicht geboren" — nie „Tag -5" (Geburtstermin in der Zukunft).
+  const dayLabel = birthDate ? dayOfLifeLabel(birthDate, refDate) : null;
   const motherName = mother?.callName?.trim();
-  const subtitle = [motherName ? `Wurf von ${motherName}` : 'Wurf', day != null ? `Tag ${day}` : null]
+  const subtitle = [motherName ? `Wurf von ${motherName}` : 'Wurf', dayLabel]
     .filter(Boolean)
     .join(' · ');
 
@@ -384,7 +385,7 @@ export function WeighScreen() {
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="text-[0.8rem] text-text-dim">
-                {day != null ? `Tag ${day}` : 'Ohne Geburtsdatum'}
+                {dayOfLifeLabel(birthDate, refDate)}
               </p>
               <p className="text-[1.05rem] font-semibold text-text">
                 {progress.done} von {progress.total} gewogen
@@ -403,7 +404,7 @@ export function WeighScreen() {
             aria-valuemin={0}
             aria-valuemax={progress.total}
             aria-valuenow={progress.done}
-            aria-label="Fortschritt"
+            aria-label={`Wiege-Fortschritt: ${progress.done} von ${progress.total} gewogen`}
           >
             <div
               className="h-full rounded-full bg-ok transition-[width] duration-300"
@@ -462,9 +463,18 @@ export function WeighScreen() {
               onCommit={() => commit(k)}
               onFocus={() => setFocusedId(k.id)}
               onBlur={() => setFocusedId((id) => (id === k.id ? null : id))}
-              onOpenDetail={() => setDetailId(k.id)}
+              // Detail-Blatt und Korrektur-Blatt schließen sich gegenseitig
+              // aus — das Detail-Blatt bringt seinen eigenen Verlauf mit
+              // Korrigieren mit, zwei offene Blätter wären ein Knoten.
+              onOpenDetail={() => {
+                setEditEntryId(null);
+                setDetailId(k.id);
+              }}
               onUndo={(entryId) => void undo(k.id, entryId)}
-              onEdit={(entryId) => setEditEntryId(entryId)}
+              onEdit={(entryId) => {
+                setDetailId(null);
+                setEditEntryId(entryId);
+              }}
             />
           ))}
         </List>
@@ -623,6 +633,11 @@ function WeighRow({
   const delta = latestDelta(entries);
   const todayCount = measurementsOn(entries, refDate);
 
+  // Das verzögerte Scrollen nach dem Fokus (Tastatur fährt hoch) darf nach
+  // dem Abbau der Zeile nicht mehr feuern.
+  const scrollTimerRef = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(scrollTimerRef.current), []);
+
   const subtitle = last
     ? `zuletzt ${formatGrams(last.grams)} · ${formatRelativeDay(dateOf(last.at))}, ${formatTime(last.at)}`
     : 'noch nie gewogen';
@@ -659,7 +674,7 @@ function WeighRow({
               )}
               {todayCount > 0 && (
                 <Badge tone="ok" icon="check">
-                  {todayCount === 1 ? 'erfasst' : `${todayCount}×`}
+                  {todayCount === 1 ? 'erfasst' : `${todayCount}× erfasst`}
                 </Badge>
               )}
             </span>
@@ -682,7 +697,11 @@ function WeighRow({
             onFocus={(e) => {
               onFocus();
               const el = e.currentTarget;
-              window.setTimeout(() => el.scrollIntoView({ block: 'center', behavior: 'smooth' }), 280);
+              window.clearTimeout(scrollTimerRef.current);
+              scrollTimerRef.current = window.setTimeout(
+                () => el.scrollIntoView({ block: 'center', behavior: 'smooth' }),
+                280,
+              );
             }}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
@@ -701,16 +720,34 @@ function WeighRow({
       )}
 
       {draft == null && lastSaved && (
-        <div className="flex items-center gap-1 rounded-[var(--radius-field)] bg-ok-soft px-3 py-1.5">
-          <span className="min-w-0 flex-1 truncate text-[0.83rem] text-text-dim">
-            Gerade gespeichert: {formatGrams(lastSaved.grams)}
+        <div
+          className="rounded-[var(--radius-field)] bg-ok-soft p-2"
+          role="status"
+        >
+          <span className="flex items-center gap-1.5 px-1.5 py-1 text-[0.83rem] font-medium text-ok">
+            <Icon name="check" size={16} />
+            {formatGrams(lastSaved.grams)} gespeichert
           </span>
-          <Button size="md" variant="ghost" onClick={() => onEdit(lastSaved.entryId)}>
-            Ändern
-          </Button>
-          <Button size="md" variant="ghost" onClick={() => onUndo(lastSaved.entryId)}>
-            Rückgängig
-          </Button>
+          <div className="grid grid-cols-2 gap-1">
+            <Button
+              size="md"
+              variant="ghost"
+              block
+              className="px-2"
+              onClick={() => onEdit(lastSaved.entryId)}
+            >
+              Ändern
+            </Button>
+            <Button
+              size="md"
+              variant="ghost"
+              block
+              className="px-2"
+              onClick={() => onUndo(lastSaved.entryId)}
+            >
+              Rückgängig
+            </Button>
+          </div>
         </div>
       )}
     </div>
@@ -732,6 +769,8 @@ function KittenDetail({
   birthDate?: string;
   analysis?: ReturnType<typeof analyzeKitten>;
 }) {
+  // Ein Bezugsdatum für das ganze Blatt: die eigene Geburtszeit des Kittens,
+  // sonst die des Wurfes — Kurve und Verlauf zählen dieselben Lebenstage.
   const ownBirthDate = kitten.bornAt ? dateOf(kitten.bornAt) : birthDate;
 
   return (
@@ -748,8 +787,10 @@ function KittenDetail({
             label="Geburtsgewicht"
             value={kitten.birthWeightG ? formatGrams(kitten.birthWeightG) : '—'}
           />
+          {/* Ohne Geburtsgewicht rechnet die Bewertung ab der ersten Messung —
+              dann darf die Kachel nicht „Seit Geburt" heißen. */}
           <Stat
-            label="Seit Geburt"
+            label={kitten.birthWeightG ? 'Seit Geburt' : 'Seit erster Wiegung'}
             value={formatPercent(analysis?.gainSinceBirthRatio, true)}
           />
           <Stat label="Zunahme" value={formatGainPerDay(analysis?.gainPerDay)} />
@@ -771,7 +812,7 @@ function KittenDetail({
         <WeightChart
           series={series}
           focusKittenId={kitten.id}
-          birthDate={birthDate}
+          birthDate={ownBirthDate}
           height={210}
           emptyHint="Für dieses Kitten ist noch kein Gewicht erfasst."
         />

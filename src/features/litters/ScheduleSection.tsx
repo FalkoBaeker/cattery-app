@@ -7,7 +7,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { Badge, Button, EmptyState, Icon, Section, useToast, type BadgeTone } from '../../ui';
 import { kittenLabel } from '../../types';
 import type { CareTask, ID, Kitten, Litter, Settings, WeightEntry } from '../../types';

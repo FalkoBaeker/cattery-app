@@ -1,5 +1,7 @@
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router';
 import { Icon, type IconName } from '../ui/Icon';
+import { useSettings } from '../db/useSettings';
+import type { Settings } from '../types';
 
 interface Tab {
   to: string;
@@ -7,18 +9,37 @@ interface Tab {
   icon: IconName;
   /** Weitere Pfade, bei denen dieser Tab aktiv erscheint. */
   matches?: string[];
+  visible?: (settings: Settings) => boolean;
 }
 
 const TABS: Tab[] = [
   { to: '/', label: 'Heute', icon: 'home' },
-  { to: '/zucht', label: 'Zucht', icon: 'cat', matches: ['/wiegen'] },
-  { to: '/warteliste', label: 'Warteliste', icon: 'users' },
-  { to: '/kalender', label: 'Kalender', icon: 'calendar' },
+  {
+    to: '/zucht',
+    label: 'Zucht',
+    icon: 'cat',
+    matches: ['/wiegen'],
+    visible: (settings) => settings.modules.cats || settings.modules.litters,
+  },
+  {
+    to: '/warteliste',
+    label: 'Warteliste',
+    icon: 'users',
+    visible: (settings) => settings.modules.waitlist,
+  },
+  {
+    to: '/kalender',
+    label: 'Kalender',
+    icon: 'calendar',
+    visible: (settings) => settings.modules.appointments,
+  },
   { to: '/mehr', label: 'Mehr', icon: 'menu' },
 ];
 
 export function TabBar() {
   const { pathname } = useLocation();
+  const settings = useSettings();
+  const tabs = TABS.filter((tab) => !tab.visible || (settings && tab.visible(settings)));
 
   function isActive(tab: Tab) {
     if (tab.to === '/') return pathname === '/';
@@ -32,7 +53,7 @@ export function TabBar() {
       className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-bg/90 backdrop-blur-xl safe-bottom"
     >
       <ul className="flex">
-        {TABS.map((tab) => {
+        {tabs.map((tab) => {
           const active = isActive(tab);
           return (
             <li key={tab.to} className="flex-1">
@@ -45,7 +66,7 @@ export function TabBar() {
                 ].join(' ')}
               >
                 <Icon name={tab.icon} size={23} strokeWidth={active ? 2 : 1.7} />
-                <span className="text-[0.66rem] font-medium tracking-tight">{tab.label}</span>
+                <span className="text-xs font-medium tracking-tight">{tab.label}</span>
               </NavLink>
             </li>
           );

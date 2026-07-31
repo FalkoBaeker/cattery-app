@@ -7,7 +7,9 @@ import {
   grammatikBefund,
   grossAmAnfang,
   kaeuferBlock,
+  loeseSchalter,
   LUECKE,
+  offeneSchalter,
   mitArtikel,
   NOMEN,
   nomenForm,
@@ -488,5 +490,46 @@ describe('Befund', () => {
     expect(b.tierWort).toBe('katze');
     expect(b.kaeuferForm).toBe('f');
     expect(b.kaeuferNumerus).toBe('sg');
+  });
+});
+
+describe('Grammatik-Schalter der Vorlagen', () => {
+  it('löst [EZ:…|MZ:…] nach der Tierzahl auf', () => {
+    expect(loeseSchalter('[EZ:Das Kitten ist|MZ:Die Kitten sind] geimpft', { tierNumerus: 'sg', kaeuferForm: 'm' })).toBe(
+      'Das Kitten ist geimpft',
+    );
+    expect(loeseSchalter('[EZ:Das Kitten ist|MZ:Die Kitten sind] geimpft', { tierNumerus: 'pl', kaeuferForm: 'm' })).toBe(
+      'Die Kitten sind geimpft',
+    );
+  });
+
+  it('löst [T1:…|TN:…] wie [EZ:…|MZ:…] auf und lässt Platzhalter stehen', () => {
+    expect(
+      loeseSchalter('[T1:eine {rasse}-Katze|TN:{tierzahlWort} {rasse}-Katzen]', {
+        tierNumerus: 'sg',
+        kaeuferForm: 'pl',
+      }),
+    ).toBe('eine {rasse}-Katze');
+  });
+
+  it('löst [K1M:…|K1W:…|KN:…] nach der Käuferseite auf', () => {
+    const t = '[K1M:Der Käufer erwirbt|K1W:Die Käuferin erwirbt|KN:Die Käufer erwerben] kein Zuchtrecht';
+    expect(loeseSchalter(t, { tierNumerus: 'sg', kaeuferForm: 'm' })).toBe('Der Käufer erwirbt kein Zuchtrecht');
+    expect(loeseSchalter(t, { tierNumerus: 'sg', kaeuferForm: 'f' })).toBe('Die Käuferin erwirbt kein Zuchtrecht');
+    expect(loeseSchalter(t, { tierNumerus: 'sg', kaeuferForm: 'pl' })).toBe('Die Käufer erwerben kein Zuchtrecht');
+  });
+
+  it('verträgt Anführungszeichen und mehrere Schalter je Satz', () => {
+    expect(
+      loeseSchalter('nachfolgend [K1M:„Käufer"|K1W:„Käuferin"|KN:gemeinsam „Käufer"] genannt. [K1M:Er|K1W:Sie|KN:Sie] zahlt.', {
+        tierNumerus: 'sg',
+        kaeuferForm: 'f',
+      }),
+    ).toBe('nachfolgend „Käuferin" genannt. Sie zahlt.');
+  });
+
+  it('offeneSchalter findet stehengebliebene Schalter', () => {
+    expect(offeneSchalter('alles gut')).toEqual([]);
+    expect(offeneSchalter('kaputt [EZ:a|MZZZ:b]')).toHaveLength(1);
   });
 });

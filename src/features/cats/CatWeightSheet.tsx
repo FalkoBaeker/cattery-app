@@ -11,7 +11,7 @@ import {
   useConfirm,
   useToast,
 } from '../../ui';
-import { db, insertPlain } from '../../db/db';
+import { db, insertPlain, patchPlain, remove } from '../../db/db';
 import type { ID } from '../../types';
 import { fromLocalInputValue, nowISO, toLocalInputValue } from '../../lib/date';
 
@@ -96,7 +96,7 @@ export function CatWeightSheet({
     setBusy(true);
     try {
       const data = { catId, at: iso, grams: Math.round(grams), note: note.trim() || undefined };
-      if (entryId) await db.catWeights.update(entryId, data);
+      if (entryId) await patchPlain(db.catWeights, entryId, data);
       else await insertPlain(db.catWeights, data);
       toast.success('Gewicht gespeichert.');
       onClose();
@@ -118,7 +118,7 @@ export function CatWeightSheet({
     if (!ok) return;
     setBusy(true);
     try {
-      await db.catWeights.delete(entryId);
+      await remove(db.catWeights, entryId);
       toast.success('Wiegung gelöscht.');
       onClose();
     } catch {
@@ -151,7 +151,8 @@ export function CatWeightSheet({
             suffix="g"
             value={grams}
             error={error}
-            autoFocus
+            /* Kein autoFocus: die Fokusfalle des Sheets setzt den Fokus selbst,
+               das Attribut verpufft hier wirkungslos. */
             onValueChange={(v) => {
               setGrams(v);
               if (error) setError(undefined);

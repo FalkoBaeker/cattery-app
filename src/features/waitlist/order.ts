@@ -362,13 +362,14 @@ export function shortNote(text: string | undefined, maxChars = 90): string {
   return `${clean.slice(0, maxChars - 1).trimEnd()}…`;
 }
 
-/** Jüngster Kontakt aus dem Verlauf. */
-export function lastContactAt(
-  notes: readonly { at: ISODateTime }[],
-): ISODateTime | undefined {
-  let latest: ISODateTime | undefined;
+/** Jüngster Kontakt je Interessent — für die Listenzeilen der Warteliste. */
+export function lastContactByInterest(
+  notes: readonly { interestId: ID; at: ISODateTime }[],
+): Map<ID, ISODateTime> {
+  const map = new Map<ID, ISODateTime>();
   for (const n of notes) {
-    if (!latest || n.at.localeCompare(latest) > 0) latest = n.at;
+    const current = map.get(n.interestId);
+    if (!current || n.at.localeCompare(current) > 0) map.set(n.interestId, n.at);
   }
-  return latest;
+  return map;
 }

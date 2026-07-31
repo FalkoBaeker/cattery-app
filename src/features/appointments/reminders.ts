@@ -115,7 +115,9 @@ function buildReminder(
   msUntilStart: number,
 ): DueReminder {
   const name = appointmentTitle(a);
-  const parts = [leadText(msUntilStart), formatDateTime(a.startAt)];
+  // Der Vorlauf steht schon in der Überschrift — im Fließtext würde er sich
+  // nur wiederholen („Termin in 30 Minuten: … / in 30 Minuten · …").
+  const parts = [formatDateTime(a.startAt)];
   if (a.location?.trim()) parts.push(a.location.trim());
   return {
     key: reminderKey(a.id, kind),
@@ -181,6 +183,34 @@ export function dueReminders(
 
   result.notify.sort((x, y) => x.startAt.localeCompare(y.startAt) || x.key.localeCompare(y.key));
   return result;
+}
+
+/**
+ * Erinnerungs-Schlüssel, deren Fenster zum Zeitpunkt `now` bereits offen ist.
+ *
+ * Gedacht für den Moment des Anlegens oder Verschiebens: Wer einen Termin
+ * anlegt, der schon in drei Stunden beginnt, weiß von ihm — eine Mitteilung
+ * „Termin in 3 Stunden" eine Minute später wäre albern. Diese Schlüssel
+ * werden deshalb sofort als erledigt vermerkt; nur Fenster, die sich erst
+ * später öffnen (hier: die 1-Stunden-Erinnerung), melden sich noch.
+ *
+ * Die Schalter (`remind24h`/`remind1h`) spielen absichtlich keine Rolle:
+ * Auch wer einen Schalter erst nachträglich einschaltet, soll für ein längst
+ * offenes Fenster keine Sofort-Mitteilung mehr bekommen.
+ */
+export function openReminderKeys(
+  a: Pick<ReminderInput, 'id' | 'startAt'>,
+  now: ISODateTime,
+): string[] {
+  const nowMs = new Date(now).getTime();
+  const startMs = new Date(a.startAt).getTime();
+  if (!Number.isFinite(nowMs) || !Number.isFinite(startMs)) return [];
+  // Vergangene Termine erinnern ohnehin nicht mehr — nichts zu vermerken.
+  if (startMs <= nowMs) return [];
+  const msUntilStart = startMs - nowMs;
+  return REMINDER_ORDER.filter((kind) => msUntilStart <= REMINDER_LEAD_MS[kind]).map((kind) =>
+    reminderKey(a.id, kind),
+  );
 }
 
 /**

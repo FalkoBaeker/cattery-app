@@ -21,6 +21,7 @@ import { syncLitterSchedule, checkLitterPause } from '../../domain/schedule';
 import { formatDate, todayISO } from '../../lib/date';
 import { dueDateFromMating } from './litter';
 import { DateInput } from './parts';
+import { deleteLitterCascade } from './data';
 
 const STATUS_OPTIONS = (Object.keys(LITTER_STATUS_LABEL) as LitterStatus[]).map((s) => ({
   value: s,
@@ -93,12 +94,21 @@ export function LitterEditorSheet({
     setFatherExternalName(litter?.fatherExternalName ?? '');
     setMatingDate(litter?.matingDate);
     setDueDate(litter?.dueDate);
-    setDueTouched(Boolean(litter?.dueDate));
+    // Ein gespeicherter Termin, der genau dem errechneten entspricht, gilt
+    // nicht als „von Hand gesetzt": Er folgt weiter dem Deckdatum und der
+    // Trächtigkeitsdauer aus den Einstellungen und wird beim Sichern frisch
+    // gerechnet. Nur ein abweichender Termin bleibt unangetastet — der kann
+    // von Hand stammen. (Andere Module lesen litter.dueDate direkt, deshalb
+    // wird der errechnete Termin weiterhin gespeichert.)
+    setDueTouched(
+      Boolean(litter?.dueDate) &&
+        litter?.dueDate !== dueDateFromMating(litter?.matingDate, settings.gestationDays),
+    );
     setBirthDate(litter?.birthDate);
     setStatus(litter?.status ?? 'planned');
     setNotes(litter?.notes ?? '');
     setError(undefined);
-  }, [open, litter, queens]);
+  }, [open, litter, queens, settings.gestationDays]);
 
   // Geburtstermin folgt dem Deckdatum, solange er nicht von Hand gesetzt wurde.
   useEffect(() => {
@@ -200,14 +210,7 @@ export function LitterEditorSheet({
     if (!ok) return;
 
     try {
-      const kittenIds = (await db.kittens.where('litterId').equals(litter.id).toArray()).map(
-        (k) => k.id,
-      );
-      await db.weights.where('kittenId').anyOf(kittenIds).delete();
-      await db.kittens.where('litterId').equals(litter.id).delete();
-      await db.birthEvents.where('litterId').equals(litter.id).delete();
-      await db.careTasks.where('litterId').equals(litter.id).delete();
-      await db.litters.delete(litter.id);
+      await deleteLitterCascade(litter.id);
       toast.show('Wurf gelöscht');
       onClose();
     } catch (e) {
@@ -233,7 +236,11 @@ export function LitterEditorSheet({
       <div className="flex flex-col gap-4">
         {queens.length === 0 ? (
           <Callout tone="accent" icon="info" title="Noch keine Königin angelegt">
-            <p>Ein Wurf braucht eine Mutter. Lege zuerst deine Zuchtkatze an.</p>
+            <p>
+              {onNeedCat
+                ? 'Ein Wurf braucht eine Mutter. Lege zuerst deine Zuchtkatze an.'
+                : 'Ein Wurf braucht eine Mutter. Schalte unter Mehr → Einstellungen den Bereich „Zuchttiere“ ein und lege dort zuerst eine Katze an.'}
+            </p>
             {onNeedCat && (
               <Button
                 className="mt-2"

@@ -8,6 +8,7 @@ import {
   groupByDay,
   leadText,
   linksForKind,
+  openReminderKeys,
   pendingFollowUps,
   reminderKey,
   splitCalendar,
@@ -202,6 +203,12 @@ describe('dueReminders', () => {
     expect(r.body).toContain('bei uns');
   });
 
+  it('wiederholt den Vorlauf nicht noch einmal im Fließtext', () => {
+    const r = dueReminders([appt({ location: 'bei uns' })], '2026-03-10T12:30:00Z').notify[0];
+    expect(r.title).toContain('in 30 Minuten');
+    expect(r.body).not.toContain('in 30 Minuten');
+  });
+
   it('nimmt ohne eigenen Titel die Art des Termins', () => {
     const r = dueReminders([appt()], '2026-03-10T12:30:00Z').notify[0];
     expect(r.title).toContain('Kennenlernen');
@@ -217,6 +224,47 @@ describe('leadText', () => {
     expect(leadText(3 * 3_600_000)).toBe('in 3 Stunden');
     expect(leadText(24 * 3_600_000)).toBe('in 1 Tag');
     expect(leadText(50 * 3_600_000)).toBe('in 2 Tagen');
+  });
+});
+
+describe('openReminderKeys', () => {
+  const a = { id: 'a1', startAt: '2026-03-10T13:00:00Z' };
+
+  it('meldet nichts, wenn der Termin weiter als 24 Stunden weg ist', () => {
+    expect(openReminderKeys(a, '2026-03-08T13:00:00Z')).toEqual([]);
+  });
+
+  it('sperrt nur die 24-Stunden-Erinnerung, wenn der Termin in 3 Stunden beginnt', () => {
+    // Die 1-Stunden-Erinnerung darf später trotzdem noch kommen.
+    expect(openReminderKeys(a, '2026-03-10T10:00:00Z')).toEqual(['appt:a1:24h']);
+  });
+
+  it('sperrt beide, wenn der Termin in 30 Minuten beginnt', () => {
+    expect(openReminderKeys(a, '2026-03-10T12:30:00Z').sort()).toEqual([
+      'appt:a1:1h',
+      'appt:a1:24h',
+    ]);
+  });
+
+  it('sperrt am 24-Stunden-Punkt genau — dort würde sonst sofort gefeuert', () => {
+    expect(openReminderKeys(a, '2026-03-09T13:00:00Z')).toEqual(['appt:a1:24h']);
+    expect(openReminderKeys(a, '2026-03-09T12:59:00Z')).toEqual([]);
+  });
+
+  it('meldet für vergangene oder unbrauchbare Zeitpunkte nichts', () => {
+    expect(openReminderKeys(a, '2026-03-10T13:00:00Z')).toEqual([]);
+    expect(openReminderKeys(a, '2026-03-11T09:00:00Z')).toEqual([]);
+    expect(openReminderKeys({ id: 'a1', startAt: 'kaputt' }, '2026-03-10T12:00:00Z')).toEqual([]);
+    expect(openReminderKeys(a, 'kaputt')).toEqual([]);
+  });
+
+  it('lässt zusammen mit dueReminders keine Sofort-Mitteilung mehr durch', () => {
+    // Anlegen 3 Stunden vor Beginn: die 24h-Erinnerung wird vorgemerkt …
+    const fired = new Set(openReminderKeys(a, '2026-03-10T10:00:00Z'));
+    expect(dueReminders([appt()], '2026-03-10T10:01:00Z', fired).notify).toHaveLength(0);
+    // … die 1-Stunden-Erinnerung meldet sich später trotzdem.
+    const later = dueReminders([appt()], '2026-03-10T12:15:00Z', fired);
+    expect(later.notify.map((r) => r.kind)).toEqual(['1h']);
   });
 });
 

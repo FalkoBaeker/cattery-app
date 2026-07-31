@@ -49,7 +49,12 @@ export function KittenEditorSheet({
 }: {
   open: boolean;
   onClose: () => void;
-  litter: Litter;
+  /**
+   * Darf beim Bearbeiten fehlen — ein Kitten bleibt auch ohne (noch)
+   * vorhandenen Wurf bearbeitbar („Alles ist optional"). Zum Anlegen eines
+   * neuen Kittens ist der Wurf nötig.
+   */
+  litter?: Litter;
   kitten?: Kitten;
   siblings: Kitten[];
   interests: Interest[];
@@ -125,7 +130,7 @@ export function KittenEditorSheet({
         // Die aus dem Geburtsgewicht erzeugte Wiegung mitziehen, sonst
         // widersprechen sich Kopfzeile und Gewichtskurve.
         await syncBirthWeightEntry(kitten, birthWeightG ?? undefined);
-        await syncLitterSchedule(litter.id, settings);
+        await syncLitterSchedule(kitten.litterId, settings);
 
         if (statusBefore !== 'deceased' && statusBefore !== saleStatus) {
           if (saleStatus === 'sold_breeding_reserved') {
@@ -145,6 +150,11 @@ export function KittenEditorSheet({
         }
         onSaved?.(kitten.id);
       } else {
+        if (!litter) {
+          // Sollte nicht vorkommen: Anlegen geht nur aus einem Wurf heraus.
+          toast.error('Zum Anlegen eines Kittens fehlt der Wurf.');
+          return;
+        }
         const created = await addKitten(
           {
             litterId: litter.id,

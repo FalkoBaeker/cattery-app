@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import { ConfirmProvider, ToastProvider } from '../../ui';
 import { db, insert, updateSettings, wipeDatabase } from '../../db/db';
 import { AppointmentDetailScreen } from './AppointmentDetailScreen';
@@ -200,6 +200,9 @@ describe('AppointmentDetailScreen — Bearbeiten', () => {
     );
     await userEvent.click(screen.getByRole('button', { name: 'Speichern' }));
 
+    // Auch die von Dexie ausgelöste Bildschirmaktualisierung abwarten. So
+    // endet der Test nicht, während React noch den Live-Query-Stand rendert.
+    expect(await screen.findByText('Nachbereitet')).toBeInTheDocument();
     await waitFor(async () => {
       const notes = await db.interestNotes.where('interestId').equals(interest.id).toArray();
       expect(notes).toHaveLength(1);

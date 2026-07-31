@@ -33,6 +33,14 @@ if (!window.matchMedia) {
   }));
 }
 
+// jsdom stellt die Methode bereit, meldet Aufrufe aber nur als
+// „not implemented“. Für die UI-Tests genügt die beobachtbare Attrappe.
+Object.defineProperty(window, 'scrollTo', {
+  configurable: true,
+  writable: true,
+  value: vi.fn(),
+});
+
 afterEach(() => {
   cleanup();
 });

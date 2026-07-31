@@ -2,6 +2,7 @@
  * Symbolsatz. Alles handgezeichnete SVG-Pfade auf 24×24 — keine Icon-Bibliothek,
  * damit die App vollständig offline und ohne Nachladen funktioniert.
  */
+/* eslint-disable react/only-export-components -- ICON_NAMES ist die öffentliche, aus demselben Symbolsatz abgeleitete Prüfliste. */
 
 export type IconName = keyof typeof PATHS;
 

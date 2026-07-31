@@ -56,8 +56,24 @@ export interface EntwurfQuellen {
 }
 
 /**
+ * Erzwingt die unverhandelbaren Grenzen von Vertrag B auch für alte oder
+ * manuell veränderte Daten: ein bis zwei Tiere, ausschließlich weiblich.
+ * Männliche Tiere werden nicht stillschweigend zu Katzen umetikettiert,
+ * sondern aus diesem Vertragsentwurf entfernt.
+ */
+export function vertragsregelnAnwenden(data: ContractData): ContractData {
+  if (data.type !== 'breeding_reserved') return data;
+  const animals = data.animals.filter((animal) => animal.sex !== 'male').slice(0, 2);
+  return {
+    ...data,
+    animals: animals.length > 0 ? animals : [{ name: '', sex: 'female' }],
+  };
+}
+
+/**
  * Legt einen Entwurf an und übernimmt, was aus Kitten und Interessent
- * schon bekannt ist. Alles bleibt änderbar — nichts wird erzwungen.
+ * schon bekannt ist. Normale Angaben bleiben änderbar; die fachlichen
+ * Grenzen von Vertrag B werden dabei immer eingehalten.
  */
 export function neuerEntwurf(
   type: ContractType,
@@ -65,6 +81,8 @@ export function neuerEntwurf(
   quellen: EntwurfQuellen = {},
 ): ContractData {
   const { kitten, litter, interest } = quellen;
+  const passendesKitten =
+    type === 'breeding_reserved' && kitten?.sex === 'male' ? undefined : kitten;
 
   const basis: ContractData = {
     type,
@@ -72,16 +90,16 @@ export function neuerEntwurf(
     buyers: interest
       ? [{ name: interest.name, address: interest.city ?? '', sex: undefined }]
       : [{ name: '', address: '' }],
-    animals: kitten
+    animals: passendesKitten
       ? [
           {
-            kittenId: kitten.id,
-            name: kittenLabel(kitten),
+            kittenId: passendesKitten.id,
+            name: kittenLabel(passendesKitten),
             // Bei noch unbekanntem Geschlecht wird „Katze" vorgeschlagen;
             // im Formular ist es mit einem Tippen geändert.
-            sex: kitten.sex === 'male' ? 'male' : 'female',
+            sex: passendesKitten.sex === 'male' ? 'male' : 'female',
             birthDate: litter?.birthDate,
-            chipNo: kitten.chipNo,
+            chipNo: passendesKitten.chipNo,
           },
         ]
       : [{ name: '', sex: 'female' }],
@@ -100,7 +118,7 @@ export function neuerEntwurf(
     };
   }
 
-  return {
+  return vertragsregelnAnwenden({
     ...basis,
     regularPriceCents: preis,
     discountCents: undefined,
@@ -110,7 +128,7 @@ export function neuerEntwurf(
     handoverDeadlineDays: VORGABE_HERAUSGABETAGE,
     matingAttempts: VORGABE_DECKVERSUCHE,
     backPaymentDays: VORGABE_NACHZAHLUNGSTAGE,
-  };
+  });
 }
 
 /**
@@ -120,7 +138,7 @@ export function neuerEntwurf(
  */
 export function artWechseln(data: ContractData, type: ContractType, settings: Settings): ContractData {
   const vorlage = neuerEntwurf(type, settings);
-  return {
+  return vertragsregelnAnwenden({
     ...vorlage,
     ...data,
     type,
@@ -135,5 +153,5 @@ export function artWechseln(data: ContractData, type: ContractType, settings: Se
     matingAttempts: data.matingAttempts ?? vorlage.matingAttempts,
     backPaymentDays: data.backPaymentDays ?? vorlage.backPaymentDays,
     breedingUseStartDate: data.breedingUseStartDate ?? vorlage.breedingUseStartDate,
-  };
+  });
 }

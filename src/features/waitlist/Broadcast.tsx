@@ -8,7 +8,8 @@
  * dran war und wer noch aussteht.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import {
   Badge,
   Button,
@@ -23,6 +24,7 @@ import {
   useToast,
 } from '../../ui';
 import type { Interest } from '../../types';
+import { db } from '../../db/db';
 import { nowISO } from '../../lib/date';
 import {
   broadcastProgress,
@@ -37,7 +39,6 @@ import {
   type BroadcastRun,
 } from './order';
 import { addContactNote, clearBroadcastRun, saveBroadcastRun } from './store';
-import { openExternal } from './constants';
 
 /* ================================================================== */
 /*  Verfassen                                                          */
@@ -63,12 +64,17 @@ export function BroadcastComposeSheet({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [starting, setStarting] = useState(false);
 
+  // Die Vorlage wird nur beim Öffnen übernommen. Hinge der Effekt an
+  // `template`, würde die nachgeladene Einstellungs-Abfrage getippten Text
+  // und Empfängerauswahl zurücksetzen, während das Blatt offen ist.
+  const templateRef = useRef(template);
+  templateRef.current = template;
   useEffect(() => {
     if (open) {
-      setText(template);
+      setText(templateRef.current);
       setSelected(new Set());
     }
-  }, [open, template]);
+  }, [open]);
 
   const reachable = useMemo(
     () => interests.filter((i) => buildWhatsAppUrl(i.phone) !== null),
@@ -295,24 +301,41 @@ export function BroadcastRunSheet({
 
   const progress = broadcastProgress(run);
   const next = nextOpenRecipient(run);
-  const nextUrl = next ? buildWhatsAppUrl(next.phone, fillTemplate(run.text, next.name)) : null;
+
+  // Die Nummer kommt frisch aus der Datenbank, nicht aus dem eingefrorenen
+  // Vorgang — sonst hülfe der Hinweis „Nummer im Eintrag ergänzen" nichts.
+  // Solange die Abfrage lädt (oder der Eintrag gelöscht wurde), gilt die
+  // beim Start gemerkte Nummer.
+  const liveNext = useLiveQuery(
+    async () => (next ? ((await db.interests.get(next.interestId)) ?? null) : null),
+    [next?.interestId],
+  );
+  const nextPhone = liveNext?.phone ?? next?.phone;
+  const nextUrl = next ? buildWhatsAppUrl(nextPhone, fillTemplate(run.text, next.name)) : null;
 
   async function send() {
     if (!next) return;
     const message = fillTemplate(run.text, next.name);
-    const url = buildWhatsAppUrl(next.phone, message);
+    const url = buildWhatsAppUrl(nextPhone, message);
     if (!url) {
       toast.error(`Für ${next.name} ist keine brauchbare Telefonnummer hinterlegt.`);
       return;
     }
     setBusy(true);
+    // Das Fenster muss synchron im Fingertipp entstehen — nach einem `await`
+    // blockt iOS Safari `window.open` grundsätzlich. Deshalb: erst leeres
+    // Fenster öffnen, dann speichern, zuletzt die Adresse setzen. Erst merken,
+    // dann losschicken: Sobald WhatsApp startet, kann iOS die App jederzeit
+    // verwerfen — was dann nicht gespeichert ist, wäre verloren.
+    const win = window.open('about:blank', '_blank');
+    if (win) win.opener = null;
     try {
-      // Erst merken, dann öffnen: Sobald WhatsApp startet, kann iOS die App
-      // jederzeit verwerfen. Was hier nicht gespeichert ist, wäre verloren.
       await saveBroadcastRun(markSent(run, next.interestId, nowISO()));
       await addContactNote(next.interestId, 'whatsapp', message);
-      openExternal(url);
+      if (win) win.location.href = url;
+      else window.location.href = url;
     } catch {
+      win?.close();
       toast.error('Die Nachricht konnte nicht vorbereitet werden.');
     } finally {
       setBusy(false);
@@ -324,13 +347,19 @@ export function BroadcastRunSheet({
     setBusy(true);
     try {
       await saveBroadcastRun(markSkipped(run, next.interestId, nowISO()));
+    } catch {
+      toast.error('Das Überspringen ließ sich nicht speichern.');
     } finally {
       setBusy(false);
     }
   }
 
   async function reopen(interestId: string) {
-    await saveBroadcastRun(markOpen(run, interestId));
+    try {
+      await saveBroadcastRun(markOpen(run, interestId));
+    } catch {
+      toast.error('Der Eintrag ließ sich nicht wieder öffnen.');
+    }
   }
 
   async function finish() {
@@ -346,7 +375,12 @@ export function BroadcastRunSheet({
       });
       if (!ok) return;
     }
-    await clearBroadcastRun();
+    try {
+      await clearBroadcastRun();
+    } catch {
+      toast.error('Der Versand ließ sich nicht beenden.');
+      return;
+    }
     toast.success(`Versand beendet — ${formatBroadcastProgress(run)}.`);
     onClose();
   }

@@ -199,7 +199,7 @@ export function summaryLine(s: LitterSummary): string {
   const parts: string[] = [`${s.alive} Kitten`];
   const sexes: string[] = [];
   if (s.females > 0) sexes.push(`${s.females} ${plural(s.females, 'Katze', 'Katzen')}`);
-  if (s.males > 0) sexes.push(`${s.males} ${plural(s.males, 'Kater', 'Kater')}`);
+  if (s.males > 0) sexes.push(`${s.males} Kater`); // Ein- und Mehrzahl gleich
   if (s.unknownSex > 0) sexes.push(`${s.unknownSex} ohne Angabe`);
   if (sexes.length > 0) parts.push(sexes.join(', '));
   if (s.stillborn > 0)

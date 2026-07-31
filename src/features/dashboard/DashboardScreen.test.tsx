@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter } from 'react-router';
 import { DashboardScreen } from './DashboardScreen';
 import { clearSettingsCache, db, wipeDatabase } from '../../db/db';
 import { DEFAULT_SETTINGS } from '../../types';
@@ -34,6 +34,39 @@ describe('DashboardScreen', () => {
     expect(screen.getByText('Zuchttiere anlegen')).toBeInTheDocument();
     expect(screen.getByText('Einstellungen ausfüllen')).toBeInTheDocument();
     expect(screen.getByText('App zum Home-Bildschirm')).toBeInTheDocument();
+  });
+
+  it('zeigt keinen toten Zuchttier-Einstieg, wenn das Modul ausgeschaltet ist', async () => {
+    await db.settings.put({
+      ...DEFAULT_SETTINGS,
+      modules: {
+        ...DEFAULT_SETTINGS.modules,
+        cats: false,
+        litters: false,
+        weights: false,
+      },
+    });
+    renderScreen();
+
+    expect(await screen.findByText('Willkommen')).toBeInTheDocument();
+    expect(screen.queryByText('Zuchttiere anlegen')).not.toBeInTheDocument();
+    expect(screen.getByText('Einstellungen ausfüllen')).toBeInTheDocument();
+  });
+
+  it('behandelt reine Dokumentdaten nicht dauerhaft als leeren Erststart', async () => {
+    await db.settings.put({ ...DEFAULT_SETTINGS, lastBackupAt: nowISO() });
+    await db.documents.put({
+      id: 'doc-1',
+      kind: 'other',
+      title: 'Notiz',
+      pageIds: [],
+      customerVisible: false,
+      ...STAMP,
+    });
+    renderScreen();
+
+    expect(await screen.findByText('Für heute ist alles erledigt.')).toBeInTheDocument();
+    expect(screen.queryByText('Willkommen')).not.toBeInTheDocument();
   });
 
   it('bleibt ruhig, wenn alles erledigt ist', async () => {

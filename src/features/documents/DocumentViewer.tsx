@@ -14,7 +14,15 @@ import { createPortal } from 'react-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '../../db/db';
 import type { ID } from '../../types';
-import { Icon, IconButton, Spinner, EmptyState, Button } from '../../ui';
+import {
+  Icon,
+  IconButton,
+  Spinner,
+  EmptyState,
+  Button,
+  useFocusTrap,
+  useToast,
+} from '../../ui';
 import { useAttachmentPages, type LoadedPage } from './useObjectUrls';
 import { buildPageFileName } from './lib/filenames';
 import { shareOrDownload } from './share/shareFile';
@@ -38,6 +46,7 @@ export function DocumentViewer({
   initialIndex = 0,
   onClose,
 }: DocumentViewerProps) {
+  const toast = useToast();
   // `undefined` = wird geladen, `null` = gibt es nicht mehr.
   const doc = useLiveQuery(
     async () => (documentId ? ((await db.documents.get(documentId)) ?? null) : null),
@@ -55,6 +64,8 @@ export function DocumentViewer({
   const [index, setIndex] = useState(initialIndex);
   const [zoomed, setZoomed] = useState(false);
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(dialogRef, true);
 
   // Seite hinter dem Betrachter darf nicht mitscrollen.
   useEffect(() => {
@@ -116,18 +127,39 @@ export function DocumentViewer({
 
   async function onShare() {
     if (!current) return;
-    // Direkt aus der Datenbank lesen — kein fetch, kein Netz, nichts.
-    const record = await db.attachments.get(current.id);
-    if (!record) return;
-    await shareOrDownload(
-      record.blob,
-      buildPageFileName(heading, index, count, current.mime),
-      heading,
-    );
+    try {
+      // Direkt aus der Datenbank lesen — kein fetch, kein Netz, nichts.
+      const record = await db.attachments.get(current.id);
+      if (!record) {
+        toast.error('Diese Seite ist nicht mehr gespeichert.');
+        return;
+      }
+      const outcome = await shareOrDownload(
+        record.blob,
+        buildPageFileName(heading, index, count, current.mime),
+        heading,
+      );
+      if (outcome === 'downloaded') {
+        toast.show('Teilen geht auf diesem Gerät nicht — die Seite wurde heruntergeladen.', {
+          tone: 'neutral',
+          icon: 'download',
+          durationMs: 5000,
+        });
+      }
+    } catch {
+      toast.error('Die Seite konnte nicht geteilt werden.');
+    }
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-[80] flex flex-col bg-black">
+    <div
+      ref={dialogRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label={heading}
+      tabIndex={-1}
+      className="fixed inset-0 z-[80] flex flex-col bg-black outline-none"
+    >
       <header className="absolute inset-x-0 top-0 z-10 flex items-center gap-2 bg-gradient-to-b from-black/75 to-transparent px-2 pb-6 safe-top">
         <IconButton
           icon="x"
@@ -191,6 +223,7 @@ export function DocumentViewer({
               page={page}
               active={i === index}
               onZoomChange={setZoomed}
+              alt={`${heading}, Seite ${i + 1} von ${pages.length}`}
             />
           ))}
         </div>
@@ -247,10 +280,12 @@ function ZoomablePage({
   page,
   active,
   onZoomChange,
+  alt,
 }: {
   page: LoadedPage;
   active: boolean;
   onZoomChange: (zoomed: boolean) => void;
+  alt: string;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [transform, setTransform] = useState<Transform>(NEUTRAL);
@@ -388,7 +423,7 @@ function ZoomablePage({
     >
       <img
         src={page.url}
-        alt=""
+        alt={alt}
         draggable={false}
         className="max-h-full max-w-full object-contain select-none"
         style={{

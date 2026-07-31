@@ -12,7 +12,7 @@ import {
   formatBroadcastProgress,
   formatPurgeHint,
   isPurgeDue,
-  lastContactAt,
+  lastContactByInterest,
   markOpen,
   markSent,
   markSkipped,
@@ -573,18 +573,24 @@ describe('shortNote', () => {
   });
 });
 
-describe('lastContactAt', () => {
-  it('findet den jüngsten Eintrag, egal in welcher Reihenfolge', () => {
-    expect(
-      lastContactAt([
-        { at: '2026-03-01T10:00:00.000Z' },
-        { at: '2026-03-05T08:00:00.000Z' },
-        { at: '2026-02-01T10:00:00.000Z' },
-      ]),
-    ).toBe('2026-03-05T08:00:00.000Z');
+describe('lastContactByInterest', () => {
+  it('findet je Interessent den jüngsten Eintrag, egal in welcher Reihenfolge', () => {
+    const map = lastContactByInterest([
+      { interestId: 'a', at: '2026-03-01T10:00:00.000Z' },
+      { interestId: 'b', at: '2026-03-02T09:00:00.000Z' },
+      { interestId: 'a', at: '2026-03-05T08:00:00.000Z' },
+      { interestId: 'a', at: '2026-02-01T10:00:00.000Z' },
+    ]);
+    expect(map.get('a')).toBe('2026-03-05T08:00:00.000Z');
+    expect(map.get('b')).toBe('2026-03-02T09:00:00.000Z');
   });
 
-  it('liefert nichts bei leerem Verlauf', () => {
-    expect(lastContactAt([])).toBeUndefined();
+  it('liefert eine leere Zuordnung bei leerem Verlauf', () => {
+    expect(lastContactByInterest([]).size).toBe(0);
+  });
+
+  it('kennt Interessenten ohne Verlauf schlicht nicht', () => {
+    const map = lastContactByInterest([{ interestId: 'a', at: '2026-03-01T10:00:00.000Z' }]);
+    expect(map.get('ohne')).toBeUndefined();
   });
 });

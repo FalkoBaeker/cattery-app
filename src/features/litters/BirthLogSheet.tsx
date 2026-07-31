@@ -145,7 +145,7 @@ export function BirthLogSheet({
         title="Geburtsprotokoll"
         action={
           <span className="px-1 text-[0.8rem] text-text-dim">
-            {bornCount} {bornCount === 1 ? 'Kitten' : 'Kitten'}
+            {bornCount} Kitten
           </span>
         }
       >
@@ -287,10 +287,11 @@ export function BirthLogSheet({
                           </span>
                         )}
                       </span>
+                      {/* 44 px — ein löschender Knopf, oft nachts mit einer Hand bedient. */}
                       <IconButton
                         icon="trash"
                         label="Eintrag löschen"
-                        size="sm"
+                        size="md"
                         variant="quiet"
                         onClick={() => removeEvent(e)}
                       />

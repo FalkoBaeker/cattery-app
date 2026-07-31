@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import type { ReactNode } from 'react';
 import { ConfirmProvider, ToastProvider } from '../../ui';
 import { db, insert, wipeDatabase } from '../../db/db';
@@ -60,7 +60,10 @@ describe('CalendarScreen', () => {
     });
 
     wrap(<CalendarScreen />);
-    expect(await screen.findByText('Kennenlernen')).toBeInTheDocument();
+    // Innerhalb des 24-Stunden-Fensters steht die Terminart zusätzlich in
+    // der Erinnerungskarte. Die eigentliche Terminzeile bleibt über Bezug
+    // und Uhrzeit eindeutig prüfbar.
+    expect((await screen.findAllByText('Kennenlernen')).length).toBeGreaterThan(0);
     expect(screen.getByText(/Familie Meyer/)).toBeInTheDocument();
     expect(screen.getByText('14:00')).toBeInTheDocument();
     // Morgen ist morgen.

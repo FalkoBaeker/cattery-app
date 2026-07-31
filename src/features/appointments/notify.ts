@@ -399,31 +399,3 @@ export function useReminderRunner(enabled = true): void {
     return ensureReminderRunner();
   }, [enabled]);
 }
-
-/* ------------------------------------------------------------------ */
-/*  Start beim Öffnen der App                                          */
-/* ------------------------------------------------------------------ */
-
-/**
- * Die Anforderung lautet: „Beim Öffnen der App wird geprüft, welche
- * Erinnerungen fällig sind." Der Prüflauf darf deshalb **nicht** am
- * Kalender-Bildschirm hängen — wer nur Kitten wiegt, tippt den Tab nie an.
- *
- * Sauber wäre ein Aufruf in `src/App.tsx`; die Datei gehört aber einem anderen
- * Modul. Stattdessen startet der Prüflauf hier beim Laden des Moduls. Das
- * genügt, weil `src/app/routes.tsx` alle Bildschirme direkt (nicht verzögert)
- * einbindet — das Modul wird also beim App-Start ausgewertet.
- *
- * In Tests bleibt der Prüflauf aus: dort startet ihn jeder Test selbst,
- * sonst liefe ein Zeitgeber über die ganze Testsitzung hinweg weiter.
- */
-function autoStartWanted(): boolean {
-  if (typeof window === 'undefined' || typeof document === 'undefined') return false;
-  try {
-    return import.meta.env?.MODE !== 'test';
-  } catch {
-    return true;
-  }
-}
-
-if (autoStartWanted()) ensureReminderRunner();

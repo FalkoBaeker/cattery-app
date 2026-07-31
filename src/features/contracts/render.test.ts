@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import {
   bedingungen,
   gemeinsamesGeburtsdatum,
+  katzenListe,
   rendereVertrag,
+  tiereListe,
   unaufgeloestePlatzhalter,
   vertragAlsText,
   werte,
@@ -81,18 +83,32 @@ const text = (data: ContractData, seller: SellerSettings = VERKAEUFERIN) =>
 /* ------------------------------------------------------------------ */
 
 describe('Aufbau der Verträge', () => {
-  it('Vertrag A hat 8 Paragrafen', () => {
+  it('Vertrag A hat 8 Paragrafen und den Titel der Vorlage', () => {
     const v = R(standard());
     expect(v.paragrafen).toHaveLength(8);
-    expect(v.titel).toBe('Kaufvertrag');
-    expect(v.paragrafen[7].ueberschrift).toBe('§ 8 Unterlagen');
+    expect(v.titel).toBe('Kaufvertrag über ein Kitten der Rasse Russisch Blau');
+    expect(v.paragrafen[7].ueberschrift).toBe('§ 8 Unterlagen (bei Übergabe ausgehändigt):');
   });
 
-  it('Vertrag B hat 17 Paragrafen', () => {
+  it('Vertrag A zählt die Kitten im Titel', () => {
+    const v = R(standard({ animals: [katze('Mia'), kater('Ben')] }));
+    expect(v.titel).toBe('Kaufvertrag über zwei Kitten der Rasse Russisch Blau');
+  });
+
+  it('Vertrag B hat 17 Paragrafen und den Titel der Vorlage', () => {
     const v = R(zucht());
     expect(v.paragrafen).toHaveLength(17);
-    expect(v.titel).toBe('Kaufvertrag mit vorbehaltener einmaliger Zuchtnutzung');
-    expect(v.paragrafen[16].ueberschrift).toBe('§ 17 Salvatorische Klausel');
+    expect(v.titel).toBe(
+      'Kaufvertrag über eine Russisch Blau-Katze als Liebhabertier mit vorbehaltener einmaliger Zuchtnutzung der Verkäuferin',
+    );
+    expect(v.paragrafen[16].ueberschrift).toBe('§ 17 Schlussbestimmungen');
+  });
+
+  it('Vertrag B mit zwei Katzen wechselt den Titel in die Mehrzahl', () => {
+    const v = R(zucht({ animals: [katze('Mia'), katze('Nala', '276093400000009')] }));
+    expect(v.titel).toBe(
+      'Kaufvertrag über zwei Russisch Blau-Katzen als Liebhabertiere mit vorbehaltener einmaliger Zuchtnutzung der Verkäuferin',
+    );
   });
 
   it('nummeriert lückenlos durch', () => {
@@ -105,7 +121,7 @@ describe('Aufbau der Verträge', () => {
     }
   });
 
-  it('lässt in keinem Fall Platzhalter stehen', () => {
+  it('lässt in keinem Fall Platzhalter oder Schalter stehen', () => {
     const faelle: ContractData[] = [
       standard(),
       standard({ depositCents: 56_000 }),
@@ -119,6 +135,7 @@ describe('Aufbau der Verträge', () => {
     for (const f of faelle) {
       expect(unaufgeloestePlatzhalter({ data: f, seller: VERKAEUFERIN })).toEqual([]);
       expect(text(f)).not.toMatch(/[{}]/);
+      expect(text(f)).not.toMatch(/\[(?:EZ|T1|K1M):/);
     }
   });
 
@@ -156,34 +173,36 @@ describe('bedingte Absätze', () => {
     expect(R(zucht({ buyers: [partei('A'), partei('B')] })).paragrafen).toHaveLength(17);
   });
 
-  it('Anzahlung: nur einer der beiden Zahlungsabsätze erscheint', () => {
+  it('Anzahlung: ohne Anzahlung wird die Kaufsumme genannt, mit Anzahlung die Restsumme', () => {
     const ohne = text(standard());
     expect(ohne).not.toMatch(/Anzahlung/);
-    expect(ohne).toMatch(/Der Kaufpreis ist spätestens bei der Übergabe zu entrichten\./);
+    expect(ohne).toMatch(/Die Kaufsumme wird vor Abholung auf das Konto von Beispiel Züchterin/);
 
     const mit = text(standard({ depositCents: 56_000 }));
-    expect(mit).toContain(`Anzahlung in Höhe von ${geld(56_000)}`);
-    expect(mit).toContain(`Restbetrag von ${geld(194_000)}`);
+    expect(mit).toContain(`Anzahlung: ${geld(56_000)} geleistet`);
+    expect(mit).toContain(`Restsumme: ${geld(194_000)}`);
+    expect(mit).toMatch(/Die Restsumme wird vor Abholung auf das Konto/);
+    expect(mit).not.toMatch(/Die Kaufsumme wird/);
   });
 
   it('eine Anzahlung von 0 € gilt als keine Anzahlung', () => {
     expect(text(standard({ depositCents: 0 }))).not.toMatch(/Anzahlung/);
   });
 
-  it('Kontodaten erscheinen nur mit hinterlegter IBAN', () => {
-    expect(text(standard())).toMatch(/IBAN: DE00/);
+  it('ohne hinterlegte IBAN bleibt im Kontosatz eine Lücke', () => {
+    expect(text(standard())).toContain('DE00 0000 0000 0000 0000 00');
     const ohneIban = text(standard(), { ...VERKAEUFERIN, iban: '' });
-    expect(ohneIban).not.toMatch(/IBAN/);
+    expect(ohneIban).toContain('das Konto von Beispiel Züchterin: __________');
   });
 
   it('der Schlussparagraf erscheint nur, wenn er gefüllt ist', () => {
     const ohne = R(standard());
-    expect(ohne.paragrafen.some((p) => p.ueberschrift.includes('Individuelle'))).toBe(false);
+    expect(ohne.paragrafen.some((p) => p.ueberschrift.includes('Ergänzende'))).toBe(false);
     expect(ohne.paragrafen).toHaveLength(8);
 
     const mit = R(standard({ additionalAgreement: 'Mia bleibt bis Juli bei der Züchterin.' }));
     expect(mit.paragrafen).toHaveLength(9);
-    expect(mit.paragrafen[8].ueberschrift).toBe('§ 9 Individuelle Vereinbarungen');
+    expect(mit.paragrafen[8].ueberschrift).toBe('§ 9 Ergänzende Vereinbarungen');
     expect(mit.paragrafen[8].absaetze[0].text).toBe('Mia bleibt bis Juli bei der Züchterin.');
   });
 
@@ -194,7 +213,7 @@ describe('bedingte Absätze', () => {
   it('in Vertrag B wird der Schlussparagraf zu § 18', () => {
     const v = R(zucht({ additionalAgreement: 'Die Katze wird im Mai abgeholt.' }));
     expect(v.paragrafen).toHaveLength(18);
-    expect(v.paragrafen[17].ueberschrift).toBe('§ 18 Individuelle Vereinbarungen');
+    expect(v.paragrafen[17].ueberschrift).toBe('§ 18 Ergänzende Vereinbarungen');
   });
 
   it('setzt die Bedingungen richtig', () => {
@@ -202,7 +221,6 @@ describe('bedingte Absätze', () => {
     expect(b.has('mehrereKaeufer')).toBe(true);
     expect(b.has('einKaeufer')).toBe(false);
     expect(b.has('ohneAnzahlung')).toBe(true);
-    expect(b.has('mitIban')).toBe(true);
     expect(b.has('zusatz')).toBe(false);
   });
 
@@ -214,170 +232,142 @@ describe('bedingte Absätze', () => {
 });
 
 /* ------------------------------------------------------------------ */
-/*  Ein Beispielsatz je Paragraf                                       */
+/*  Stichproben aus dem Wortlaut                                       */
+/*  (Der vollständige Abgleich gegen die Textvorlagen steht in         */
+/*  vorlagen.test.ts — hier nur die Grammatik-Weichen.)                */
 /* ------------------------------------------------------------------ */
 
-describe('Vertrag A — je Paragraf ein Beispielsatz', () => {
-  const v = R(standard({ animals: [katze('Mia')], buyers: [partei('Anna Muster', 'female')] }));
-  const absatz = (nr: number, i = 0) => v.paragrafen[nr - 1].absaetze[i].text;
-
-  it('§ 1 nennt Verkäuferin, Käuferin und das Tier', () => {
-    expect(absatz(1)).toBe(
-      'Die Verkäuferin verkauft der Käuferin eine Katze der Rasse Russisch Blau.',
+describe('Vertrag A — Grammatik-Weichen im Wortlaut', () => {
+  it('ein Kitten: Einzahl in § 1', () => {
+    const v = R(standard());
+    expect(v.paragrafen[0].absaetze[0].text).toBe(
+      'Die Verkäuferin veräußert ein reinrassiges Russisch Blau-Kitten.',
     );
-    expect(absatz(1, 1)).toBe('Mia, Katze, Chipnummer 276093400000001, geboren am 03.03.2026');
-    expect(absatz(1, 2)).toBe('Die Katze wurde am 03.03.2026 geboren.');
+    expect(v.paragrafen[0].absaetze[1].text).toBe(
+      'Chipnummer: 276093400000001 (Mia)\nGeboren am: 03.03.2026',
+    );
+    expect(v.paragrafen[0].absaetze[2].text).toMatch(/^Das Kitten ist bis zum Übergabetermin/);
+    expect(v.paragrafen[0].absaetze[2].text).toMatch(/Zuchtvereins Catmaniac/);
   });
 
-  it('§ 2 nennt den Kaufpreis', () => {
-    expect(absatz(2)).toBe(`Der Kaufpreis beträgt insgesamt ${geld(250_000)}.`);
+  it('zwei Kitten: Mehrzahl in § 1, eine Zeile je Chipnummer', () => {
+    const v = R(standard({ animals: [katze('Mia'), kater('Ben')] }));
+    expect(v.paragrafen[0].absaetze[0].text).toBe(
+      'Die Verkäuferin veräußert zwei reinrassige Russisch Blau-Kitten.',
+    );
+    expect(v.paragrafen[0].absaetze[1].text).toBe(
+      'Chipnummer: 276093400000001 (Mia)\nChipnummer: 276093400000002 (Ben)\nGeboren am: 03.03.2026',
+    );
+    expect(v.paragrafen[0].absaetze[2].text).toMatch(/^Die Kitten sind bis zum Übergabetermin/);
   });
 
-  it('§ 3 nennt Termin und Ort als freien Text', () => {
-    expect(absatz(3)).toBe('Die Übergabe erfolgt voraussichtlich Anfang Juni 2026 in Beispielstadt.');
-  });
-
-  it('§ 4 beschreibt den Gesundheitszustand', () => {
-    expect(absatz(4).startsWith('Die Katze ist bei der Übergabe')).toBe(true);
-  });
-
-  it('§ 5 verpflichtet die Käuferin zur artgerechten Haltung', () => {
-    expect(absatz(5).startsWith('Die Käuferin verpflichtet sich, die Katze artgerecht')).toBe(true);
-  });
-
-  it('§ 6 schließt die Zucht aus', () => {
-    expect(absatz(6)).toBe(
-      'Die Katze wird ausschließlich als Liebhabertier abgegeben. Eine Verwendung zur Zucht ist ausgeschlossen.',
+  it('§ 3 druckt Ort und Termin als freien Text', () => {
+    expect(R(standard()).paragrafen[2].absaetze[0].text).toMatch(
+      /^Übergabeort: Beispielstadt - am: Anfang Juni 2026 oder nach Vereinbarung\./,
     );
   });
 
-  it('§ 7 schließt die Gewähr aus', () => {
-    expect(absatz(7).startsWith('Die Katze wird als lebendes Tier verkauft.')).toBe(true);
+  it('§ 3 und § 4 passen sich an die Käuferseite an', () => {
+    const w = R(standard({ buyers: [partei('Anna')] }));
+    expect(w.paragrafen[2].absaetze[0].text).toMatch(/auf die Käuferin über\.$/);
+    expect(w.paragrafen[3].absaetze[0].text).toMatch(/von der Käuferin am Tag der/);
+
+    const m = R(standard({ buyers: [partei('Ben', 'male')] }));
+    expect(m.paragrafen[2].absaetze[0].text).toMatch(/auf den Käufer über\.$/);
+
+    const viele = R(standard({ buyers: [partei('Anna'), partei('Ben', 'male')] }));
+    expect(viele.paragrafen[2].absaetze[0].text).toMatch(/auf die Käufer über\.$/);
+    expect(viele.paragrafen[3].absaetze[0].text).toMatch(/von den Käufern am Tag der/);
   });
 
-  it('§ 8 zählt die Unterlagen auf und ist immer gleich', () => {
-    expect(absatz(8)).toBe('Mit der Übergabe erhält die Käuferin folgende Unterlagen:');
-    expect(absatz(8, 1)).toMatch(/Impfpass mit eingetragener Chipnummer/);
-
-    // Derselbe Paragraf mit ganz anderen Daten — nur Artikel ändern sich.
-    const anders = R(standard({ animals: [kater('Ben'), kater('Carl')], buyers: [partei('X', 'male'), partei('Y', 'male')] }));
-    expect(anders.paragrafen[7].absaetze[0].text).toBe(
-      'Mit der Übergabe erhalten die Käufer folgende Unterlagen:',
+  it('§ 5 trägt die Käuferseite in der Überschrift', () => {
+    expect(R(standard()).paragrafen[4].ueberschrift).toBe('§ 5 Pflichten der Käuferin');
+    expect(R(standard({ buyers: [partei('Ben', 'male')] })).paragrafen[4].ueberschrift).toBe(
+      '§ 5 Pflichten des Käufers',
     );
-    expect(anders.paragrafen[7].absaetze[1].text).toBe(v.paragrafen[7].absaetze[1].text);
+    expect(
+      R(standard({ buyers: [partei('A'), partei('B')] })).paragrafen[4].ueberschrift,
+    ).toBe('§ 5 Pflichten der Käufer');
+  });
+
+  it('der Vorspann nennt beide Parteien mit Anschrift und Geburtsdatum', () => {
+    const v = R(standard());
+    const vorspann = v.vorspann.map((a) => a.text).join('\n');
+    expect(vorspann).toContain('Name: Beispiel Züchterin');
+    expect(vorspann).toContain('Geb.-Datum: 14.06.1985');
+    expect(vorspann).toContain('Käuferin:\nName: Anna Muster');
+    expect(vorspann).toContain('Geb. am: 05.04.1990');
   });
 });
 
-describe('Vertrag B — je Paragraf ein Beispielsatz', () => {
-  const v = R(zucht({ buyers: [partei('Anna Muster', 'female')] }));
-  const absatz = (nr: number, i = 0) => v.paragrafen[nr - 1].absaetze[i].text;
-
-  it('§ 1 Vertragsgegenstand', () => {
-    expect(absatz(1)).toBe(
-      'Die Verkäuferin verkauft der Käuferin eine Katze der Rasse Russisch Blau.',
+describe('Vertrag B — Grammatik-Weichen im Wortlaut', () => {
+  it('§ 1 nennt die Katze mit dem Datenblock der Vorlage', () => {
+    const v = R(zucht());
+    expect(v.paragrafen[0].absaetze[1].text).toBe(
+      'Name: Mia\nRasse: Russisch Blau\nGeschlecht: weiblich\nGeburtsdatum: 03.03.2026\nChipnummer: 276093400000001',
     );
+    expect(v.paragrafen[0].absaetze[2].text).toBe('nachfolgend „Katze" oder „Mia" genannt.');
   });
 
-  it('§ 2 regulärer Preis, Nachlass und ermäßigter Betrag', () => {
-    expect(absatz(2)).toBe(`Der reguläre Kaufpreis beträgt ${geld(250_000)}.`);
-    expect(absatz(2, 1)).toBe(
-      'Wegen des in § 3 vereinbarten Vorbehalts der einmaligen Zuchtnutzung gewährt die ' +
-        `Verkäuferin einen Preisnachlass in Höhe von ${geld(138_000)}. Die Käuferin zahlt ` +
-        `damit einen ermäßigten Kaufpreis von ${geld(112_000)}.`,
-    );
-    expect(absatz(2, 3)).toMatch(/Verwendungszweck: Kaufvertrag Mia \/ Anna Muster/);
+  it('§ 1 bei zwei Katzen: zwei Datenblöcke und „Katzen"', () => {
+    const v = R(zucht({ animals: [katze('Mia'), katze('Nala', '276093400000009')] }));
+    expect(v.paragrafen[0].absaetze[1].text).toContain('Name: Mia');
+    expect(v.paragrafen[0].absaetze[1].text).toContain('Name: Nala');
+    expect(v.paragrafen[0].absaetze[2].text).toBe('nachfolgend „Katzen" genannt.');
   });
 
-  it('§ 3 Vorbehalt der Zuchtnutzung', () => {
-    expect(absatz(3).startsWith('Die Verkäuferin behält sich das Recht vor, die Katze einmalig')).toBe(
-      true,
-    );
+  it('§ 2 rechnet Preis, Nachlass und ermäßigten Betrag in den Text', () => {
+    const t = text(zucht());
+    expect(t).toContain(`Der Kaufpreis für die Katze beträgt ${geld(250_000)}.`);
+    expect(t).toContain(`einen Preisnachlass in Höhe von ${geld(138_000)}`);
+    expect(t).toContain(`ein Betrag von ${geld(112_000)} zu zahlen ist`);
+    expect(t).toContain(`Der ermäßigte Betrag von ${geld(112_000)} ist auf folgendes Konto`);
+    expect(t).toMatch(/Verwendungszweck: Kaufvertrag Mia \/ Anna Muster/);
   });
 
-  it('§ 4 Frist von 18 Monaten mit berechnetem Ende', () => {
-    expect(absatz(4)).toBe(
-      'Das Recht zur Zuchtnutzung ist auf 18 Monate ab der erstmaligen Überlassung der Katze an die Käuferin befristet.',
-    );
-    expect(absatz(4, 1)).toBe(
-      'Die erstmalige Überlassung erfolgte am 01.06.2026. Die Frist endet damit mit Ablauf des 01.12.2027.',
-    );
+  it('die Fristen stehen als Zahlen im Text', () => {
+    const t = text(zucht());
+    expect(t).toContain('innerhalb von 18 Monaten ab der erstmaligen Überlassung');
+    expect(t).toContain('einmalig um bis zu 6 Monate verlängern');
+    expect(t).toContain('innerhalb von 3 Kalendertagen');
+    expect(t).toContain('bis zu 2 Deckversuche');
+    expect(t).toContain('innerhalb von 14 Tagen ab Zugang');
   });
 
-  it('§ 5 Verlängerung um 6 Monate', () => {
-    expect(absatz(5)).toMatch(/verlängert sich einmalig um 6 Monate/);
+  it('geänderte Fristen wandern in den Text', () => {
+    const t = text(zucht({ breedingUseMonths: 24, handoverDeadlineDays: 5 }));
+    expect(t).toContain('innerhalb von 24 Monaten');
+    expect(t).toContain('innerhalb von 5 Kalendertagen');
   });
 
-  it('§ 6 Herausgabe binnen 3 Kalendertagen', () => {
-    expect(absatz(6, 1)).toBe(
-      'Die Käuferin verpflichtet sich, die Katze innerhalb von 3 Kalendertagen nach dieser Anzeige an die Verkäuferin herauszugeben.',
-    );
-  });
+  it('die Käuferseite zieht sich durch den ganzen Vertrag', () => {
+    const w = text(zucht({ buyers: [partei('Anna')] }));
+    expect(w).toContain('nachfolgend „Käuferin" genannt.');
+    expect(w).toContain('Die Käuferin erwirbt kein eigenes Zuchtrecht.');
+    expect(w).toContain('§ 6 Zuchtverbot der Käuferin');
+    expect(w).toContain('§ 10 Haltungspflichten der Käuferin');
+    expect(w).toContain('ist die Käuferin Verbraucherin');
 
-  it('§ 7 Dauer der Überlassung', () => {
-    expect(absatz(7).startsWith('Die Katze bleibt bei der Verkäuferin')).toBe(true);
-  });
+    const m = text(zucht({ buyers: [partei('Ben', 'male')] }));
+    expect(m).toContain('nachfolgend „Käufer" genannt.');
+    expect(m).toContain('Der Käufer erwirbt kein eigenes Zuchtrecht.');
+    expect(m).toContain('§ 6 Zuchtverbot des Käufers');
 
-  it('§ 8 zwei Deckversuche', () => {
-    expect(absatz(8)).toBe('Die Verkäuferin hat Anspruch auf bis zu 2 Deckversuche.');
-  });
-
-  it('§ 9 Kosten während der Überlassung', () => {
-    expect(absatz(9)).toMatch(/tierärztliche Versorgung der Katze/);
-  });
-
-  it('§ 10 Eigentum an den Nachkommen', () => {
-    expect(absatz(10)).toBe(
-      'Die aus der Zuchtnutzung hervorgehenden Nachkommen stehen im Alleineigentum der Verkäuferin.',
-    );
-  });
-
-  it('§ 11 Kastrationsverbot', () => {
-    expect(absatz(11)).toBe(
-      'Die Käuferin darf die Katze bis zum Abschluss der Zuchtnutzung weder kastrieren noch sterilisieren lassen.',
-    );
-  });
-
-  it('§ 12 Gesundheitsvorsorge', () => {
-    expect(absatz(12)).toMatch(/HCM/);
-    expect(absatz(12, 1)).toBe('Die Kosten dieser Untersuchungen trägt die Verkäuferin.');
-  });
-
-  it('§ 13 Haltung', () => {
-    expect(absatz(13).startsWith('Die Käuferin verpflichtet sich, die Katze artgerecht')).toBe(true);
-  });
-
-  it('§ 14 Weitergabe und Anzeigepflichten', () => {
-    expect(absatz(14).startsWith('Solange das Recht zur Zuchtnutzung besteht, darf die Käuferin')).toBe(
-      true,
-    );
-  });
-
-  it('§ 15 Fristablauf und Nachzahlung binnen 14 Tagen', () => {
-    expect(absatz(15, 1)).toBe(
-      `Die Käuferin hat in diesem Fall den Preisnachlass in Höhe von ${geld(138_000)} ` +
-        'binnen 14 Tagen nach Fristablauf nachzuzahlen.',
-    );
-  });
-
-  it('§ 16 Unterlagen und Schlussbestimmungen', () => {
-    expect(absatz(16)).toMatch(/Impfpass mit eingetragener Chipnummer/);
-  });
-
-  it('§ 17 Salvatorische Klausel', () => {
-    expect(absatz(17).startsWith('Sollte eine Bestimmung dieses Vertrages unwirksam')).toBe(true);
+    const viele = text(zucht({ buyers: [partei('Anna'), partei('Ben', 'male')] }));
+    expect(viele).toContain('nachfolgend gemeinsam „Käufer" genannt.');
+    expect(viele).toContain('Die Käufer erwerben kein eigenes Zuchtrecht.');
+    expect(viele).toContain('§ 6 Zuchtverbot der Käufer');
   });
 
   it('passt sich bei zwei Katzen und drei Käufern durchgehend an', () => {
-    const m = R(
+    const alles = text(
       zucht({
         animals: [katze('Mia'), katze('Nala', '276093400000009')],
         buyers: [partei('Anna'), partei('Ben', 'male'), partei('Cem', 'male')],
       }),
     );
-    const alles = vertragAlsText(m);
-    expect(alles).toMatch(/verkauft den Käufern zwei Katzen der Rasse Russisch Blau/);
-    expect(alles).toMatch(/Die Katzen wurden am 03\.03\.2026 geboren\./);
-    expect(alles).toMatch(/Die Käufer verpflichten sich, die Katzen innerhalb von 3 Kalendertagen/);
+    expect(alles).toContain('Anna, Ben und Cem');
+    expect(alles).toContain('die Russisch Blau-Katzen:');
     expect(alles).toMatch(/Verwendungszweck: Kaufvertrag Mia und Nala \/ Anna, Ben und Cem/);
     expect(alles).toMatch(/Mehrere Käufer haften/);
   });
@@ -401,9 +391,21 @@ describe('Werte und Lücken', () => {
     expect(t).not.toMatch(/[{}]/);
   });
 
+  it('auch der leere Zuchtnutzungsvertrag druckt Lücken statt Erfundenem', () => {
+    const leer: ContractData = {
+      type: 'breeding_reserved',
+      buyers: [],
+      animals: [],
+      breed: '',
+    };
+    const t = text(leer, { name: '', address: '', clubName: 'Catmaniac' });
+    expect(t).toMatch(/__________/);
+    expect(t).not.toMatch(/undefined|null|NaN/);
+  });
+
   it('nimmt den Übergabeort aus den Einstellungen, wenn keiner eingetragen ist', () => {
     const w = werte(standard({ handoverPlace: '' }), VERKAEUFERIN);
-    expect(w.uebergabeort).toBe('Beispielstadt');
+    expect(w.uebergabeOrt).toBe('Beispielstadt');
   });
 
   it('rechnet Restsumme und ermäßigten Betrag ins Vokabular', () => {
@@ -411,7 +413,16 @@ describe('Werte und Lücken', () => {
     expect(a.restsumme).toBe(geld(194_000));
     const b = werte(zucht(), VERKAEUFERIN);
     expect(b.ermaessigt).toBe(geld(112_000));
-    expect(b.fristende).toBe('01.12.2027');
+  });
+
+  it('verbindet mehrere Käufer zu einer Namenszeile und lässt doppelte Anschriften weg', () => {
+    const w = werte(
+      standard({ buyers: [partei('Anna Muster'), partei('Ben Muster', 'male')] }),
+      VERKAEUFERIN,
+    );
+    expect(w['kaeufer.name']).toBe('Anna Muster und Ben Muster');
+    // Beide wohnen unter derselben Anschrift — sie erscheint nur einmal.
+    expect(w['kaeufer.anschrift']).toBe('Musterweg 1, 12345 Musterstadt');
   });
 
   it('gemeinsames Geburtsdatum: gleich, verschieden, fehlend', () => {
@@ -430,6 +441,14 @@ describe('Werte und Lücken', () => {
     expect(werte(standard({ totalPriceCents: undefined }), VERKAEUFERIN).preis).toBe(
       '__________ €',
     );
+  });
+
+  it('tiereListe und katzenListe drucken Lücken für fehlende Angaben', () => {
+    expect(tiereListe(standard({ animals: [{ name: '', sex: 'female' }] }))).toBe(
+      'Chipnummer: __________ (__________)',
+    );
+    expect(katzenListe(zucht({ animals: [] }))).toContain('Name: __________');
+    expect(katzenListe(zucht({ animals: [] }))).toContain('Geschlecht: weiblich');
   });
 });
 
@@ -478,6 +497,11 @@ describe('Hinweise', () => {
     expect(v.hinweise[0]).toMatch(/Einstellungen/);
   });
 
+  it('meldet eine fehlende IBAN', () => {
+    const v = R(standard(), { ...VERKAEUFERIN, iban: '' });
+    expect(v.hinweise.join(' ')).toMatch(/IBAN/);
+  });
+
   it('meldet fehlende Angaben im Zuchtnutzungsvertrag', () => {
     const v = R(zucht({ breedingUseStartDate: undefined, discountCents: undefined }));
     expect(v.hinweise.join(' ')).toMatch(/Preisnachlass fehlt/);
@@ -501,7 +525,7 @@ describe('Hinweise', () => {
 describe('Textausgabe', () => {
   it('beginnt mit dem Titel und endet mit den Unterschriften', () => {
     const t = text(standard());
-    expect(t.split('\n')[0]).toBe('Kaufvertrag');
+    expect(t.split('\n')[0]).toBe('Kaufvertrag über ein Kitten der Rasse Russisch Blau');
     expect(t.trimEnd().endsWith('Käuferin: Anna Muster')).toBe(true);
   });
 
@@ -511,7 +535,7 @@ describe('Textausgabe', () => {
 
   it('enthält alle Paragrafenüberschriften in der richtigen Reihenfolge', () => {
     // Nur Überschriften am Zeilenanfang zählen — im Text stehen auch
-    // Querverweise wie „in § 3 vereinbarten".
+    // Querverweise wie „nach § 2".
     const ueberschriften = vertragAlsText(R(zucht()))
       .split('\n')
       .filter((z) => /^§ \d+ /.test(z));

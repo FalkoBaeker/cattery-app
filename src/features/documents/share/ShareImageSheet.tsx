@@ -24,10 +24,14 @@ import {
 import { db, getSettings } from '../../../db/db';
 import { kittenLabel, type ID } from '../../../types';
 import { ageInDays, formatDate, todayISO } from '../../../lib/date';
-import { dailyAverages } from '../../../domain/weight';
 import { buildShareFileName } from '../lib/filenames';
 import { useObjectUrl } from '../useObjectUrls';
-import { buildGreeting, buildShareCardModel, type CurveSample } from './shareCardLayout';
+import {
+  buildGreeting,
+  buildShareCardModel,
+  latestDailySamples,
+  type CurveSample,
+} from './shareCardLayout';
 import { renderShareCard } from './renderShareCard';
 import { shareOrDownload } from './shareFile';
 
@@ -73,13 +77,17 @@ export function ShareImageSheet({ open, onClose, kittenId }: ShareImageSheetProp
 
   const samples: CurveSample[] = useMemo(() => {
     if (!data?.weights) return [];
-    return dailyAverages(data.weights).map((entry) => ({
-      date: entry.date,
-      grams: entry.grams,
-    }));
+    return latestDailySamples(data.weights);
   }, [data?.weights]);
 
-  const latestGrams = samples.length > 0 ? samples[samples.length - 1].grams : null;
+  // Die Kurve zeigt bewusst einen Tageswert. Die groß hervorgehobene aktuelle
+  // Zahl muss dagegen die wirklich letzte Messung sein — nicht der Mittelwert
+  // aus mehreren Wiegungen desselben Tages.
+  const latestGrams =
+    data?.weights?.reduce<(typeof data.weights)[number] | undefined>(
+      (latest, entry) => (!latest || entry.at > latest.at ? entry : latest),
+      undefined,
+    )?.grams ?? null;
 
   // Anrede aus dem Interessenten vorbelegen — überschreibbar.
   useEffect(() => {

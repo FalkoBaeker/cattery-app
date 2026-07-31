@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { useLiveQuery } from 'dexie-react-hooks';
 
 import {
@@ -25,7 +25,7 @@ import {
   useConfirm,
   useToast,
 } from '../../ui';
-import { db, getSettings, insert, patch, remove } from '../../db/db';
+import { db, getSettings, insert } from '../../db/db';
 import { formatDate } from '../../lib/date';
 import { formatMoney } from '../../lib/format';
 import type {
@@ -51,7 +51,14 @@ import {
 import { rendereVertrag, vertragAlsText } from './render';
 import { dateiname, pdfAmVertragSpeichern, teilenOderHerunterladen, vertragsPdfBlob } from './pdf';
 import { vorgangAnlegen, vorgangAusVertragAktualisieren, vorgangZuVertrag } from './breedingUse';
-import { artWechseln, neuerEntwurf, tierNamen, verkaeuferdatenFehlen } from './helpers';
+import {
+  artWechseln,
+  neuerEntwurf,
+  tierNamen,
+  verkaeuferdatenFehlen,
+  vertragsregelnAnwenden,
+} from './helpers';
+import { vertragAktualisieren, vertragMitPdfLoeschen } from './store';
 
 /* ------------------------------------------------------------------ */
 /*  Bildschirm                                                         */
@@ -95,7 +102,7 @@ export function ContractEditorScreen() {
         setNichtGefunden(true);
         return;
       }
-      setEntwurf(vorhanden.data);
+      setEntwurf(vertragsregelnAnwenden(vorhanden.data));
       return;
     }
 
@@ -137,30 +144,36 @@ export function ContractEditorScreen() {
    */
   async function speichern(): Promise<Contract | null> {
     if (!entwurf) return null;
+    const gueltigerEntwurf = vertragsregelnAnwenden(entwurf);
     const id = contractId ?? gespeicherteId.current;
 
     if (id) {
       const bestand = await db.contracts.get(id);
       if (bestand) {
-        await patch(db.contracts, id, { type: entwurf.type, data: entwurf });
-        const aktualisiert: Contract = { ...bestand, type: entwurf.type, data: entwurf };
-        if (entwurf.type === 'breeding_reserved') {
+        const aktualisiert = await vertragAktualisieren(
+          bestand,
+          gueltigerEntwurf.type,
+          gueltigerEntwurf,
+        );
+        if (gueltigerEntwurf.type === 'breeding_reserved') {
           await vorgangAnlegen(aktualisiert);
           await vorgangAusVertragAktualisieren(aktualisiert);
         }
+        setEntwurf(gueltigerEntwurf);
         setGeaendert(false);
         return aktualisiert;
       }
     }
 
     const neu = await insert(db.contracts, {
-      type: entwurf.type,
-      data: entwurf,
+      type: gueltigerEntwurf.type,
+      data: gueltigerEntwurf,
       interestId: suche.get('interestId') ?? undefined,
       litterId: suche.get('litterId') ?? undefined,
     });
+    setEntwurf(gueltigerEntwurf);
     gespeicherteId.current = neu.id;
-    if (entwurf.type === 'breeding_reserved') await vorgangAnlegen(neu);
+    if (gueltigerEntwurf.type === 'breeding_reserved') await vorgangAnlegen(neu);
     setGeaendert(false);
     navigate(`/mehr/vertraege/${neu.id}`, { replace: true });
     return neu;
@@ -170,7 +183,16 @@ export function ContractEditorScreen() {
     setArbeitet(true);
     try {
       const c = await speichern();
-      if (c) toast.success('Vertrag gespeichert');
+      if (c) {
+        if (vorhanden?.pdfAttachmentId && !c.pdfAttachmentId) {
+          toast.show('Vertrag gespeichert. Das bisherige PDF war nicht mehr aktuell und wurde entfernt.', {
+            tone: 'warn',
+            durationMs: 7000,
+          });
+        } else {
+          toast.success('Vertrag gespeichert');
+        }
+      }
     } catch {
       toast.error('Der Vertrag konnte nicht gespeichert werden.');
     } finally {
@@ -207,15 +229,20 @@ export function ContractEditorScreen() {
     if (!contractId || !vorhanden) return;
     const ok = await confirm({
       title: 'Vertrag löschen?',
-      message: 'Der Vertrag und das erzeugte PDF werden gelöscht.',
+      message: vorgang
+        ? `Der Vertrag und das erzeugte PDF werden gelöscht. Der Zuchtnutzungs-Vorgang zu ${vorgang.catName} bleibt mit seinem Verlauf bestehen.`
+        : 'Der Vertrag und das erzeugte PDF werden gelöscht. Das lässt sich nicht rückgängig machen.',
       confirmLabel: 'Löschen',
       danger: true,
     });
     if (!ok) return;
-    if (vorhanden.pdfAttachmentId) await db.attachments.delete(vorhanden.pdfAttachmentId);
-    await remove(db.contracts, contractId);
-    toast.success('Vertrag gelöscht');
-    navigate('/mehr/vertraege', { replace: true });
+    try {
+      await vertragMitPdfLoeschen(vorhanden);
+      toast.success('Vertrag gelöscht');
+      navigate('/mehr/vertraege', { replace: true });
+    } catch {
+      toast.error('Der Vertrag konnte nicht gelöscht werden.');
+    }
   }
 
   /* ---------------------------------------------------------------- */
@@ -248,6 +275,7 @@ export function ContractEditorScreen() {
   }
 
   const istZucht = entwurf.type === 'breeding_reserved';
+  const istBereitsGespeichert = Boolean(contractId || gespeicherteId.current);
 
   return (
     <Screen
@@ -284,21 +312,33 @@ export function ContractEditorScreen() {
         {/* --- Vertragsart --- */}
         <Section title="Vertragsart">
           <Card>
-            <Segmented<ContractType>
-              value={entwurf.type}
-              onChange={(v) => {
-                setEntwurf(artWechseln(entwurf, v, settings));
-                setGeaendert(true);
-              }}
-              options={[
-                { value: 'standard', label: 'Kaufvertrag' },
-                { value: 'breeding_reserved', label: 'Mit Zuchtvorbehalt' },
-              ]}
-            />
+            {istBereitsGespeichert ? (
+              <div className="flex items-center justify-between gap-3 px-1">
+                <div>
+                  <p className="font-medium text-text">{CONTRACT_TYPE_LABEL[entwurf.type]}</p>
+                  <p className="mt-0.5 text-[0.8rem] text-text-faint">
+                    Nach dem ersten Speichern festgelegt
+                  </p>
+                </div>
+                <Badge tone="neutral">fest</Badge>
+              </div>
+            ) : (
+              <Segmented<ContractType>
+                value={entwurf.type}
+                onChange={(v) => {
+                  setEntwurf(artWechseln(entwurf, v, settings));
+                  setGeaendert(true);
+                }}
+                options={[
+                  { value: 'standard', label: 'Kaufvertrag' },
+                  { value: 'breeding_reserved', label: 'Mit Zuchtvorbehalt' },
+                ]}
+              />
+            )}
             <p className="mt-3 px-1 text-[0.82rem] leading-relaxed text-text-dim">
               {istZucht
                 ? '17 Paragrafen. Ein bis zwei Katzen, immer weiblich. Der Preisnachlass gilt für eine einmalige Zuchtnutzung; daraus entsteht ein Vorgang mit Frist.'
-                : '8 Paragrafen. Ein oder mehrere Kitten, Abgabe als Liebhabertier.'}
+                : '8 Paragrafen. Ein oder mehrere Kitten in einem Vertrag.'}
             </p>
           </Card>
         </Section>
@@ -360,6 +400,7 @@ export function ContractEditorScreen() {
               <Button
                 icon="plus"
                 className="flex-1"
+                disabled={istZucht && entwurf.animals.length >= 2}
                 onClick={() =>
                   aendern({
                     animals: [...entwurf.animals, { name: '', sex: 'female' }],
@@ -368,7 +409,12 @@ export function ContractEditorScreen() {
               >
                 Weiteres Tier
               </Button>
-              <Button icon="paw" className="flex-1" onClick={() => setKittenWahlOffen(true)}>
+              <Button
+                icon="paw"
+                className="flex-1"
+                disabled={istZucht && entwurf.animals.length >= 2}
+                onClick={() => setKittenWahlOffen(true)}
+              >
                 Aus Wurf
               </Button>
             </div>
@@ -758,19 +804,23 @@ function TierKarte({
           value={tier.name ?? ''}
           onChange={(e) => onChange({ ...tier, name: e.target.value })}
         />
-        <Segmented
-          label="Geschlecht"
-          value={tier.sex}
-          onChange={(v) => onChange({ ...tier, sex: v })}
-          options={[
-            { value: 'female', label: 'Katze' },
-            { value: 'male', label: 'Kater' },
-          ]}
-        />
-        {nurWeiblich && tier.sex === 'male' && (
-          <Callout tone="warn" icon="alert">
-            Der Vertrag mit Zuchtvorbehalt gilt nur für weibliche Tiere.
-          </Callout>
+        {nurWeiblich ? (
+          <div className="flex flex-col gap-1.5">
+            <span className="px-1 text-[0.85rem] font-medium text-text-dim">Geschlecht</span>
+            <div className="min-h-11 rounded-[var(--radius-field)] bg-surface-2 px-3.5 py-2.5 text-[0.95rem] text-text">
+              Katze (weiblich)
+            </div>
+          </div>
+        ) : (
+          <Segmented
+            label="Geschlecht"
+            value={tier.sex}
+            onChange={(v) => onChange({ ...tier, sex: v })}
+            options={[
+              { value: 'female', label: 'Katze' },
+              { value: 'male', label: 'Kater' },
+            ]}
+          />
         )}
         <TextInput
           label="Chipnummer"

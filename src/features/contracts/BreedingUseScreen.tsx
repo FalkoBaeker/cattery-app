@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router';
 import { useLiveQuery } from 'dexie-react-hooks';
 
 import {
@@ -22,7 +22,7 @@ import {
   useToast,
 } from '../../ui';
 import { db, patch } from '../../db/db';
-import { formatDate, formatDateTime, formatDeadline, nowISO } from '../../lib/date';
+import { dateOf, formatDate, formatDateTime, formatDeadline, nowISO } from '../../lib/date';
 import { formatMoney } from '../../lib/format';
 import type { BreedingUseStage } from '../../types';
 import { BREEDING_USE_STAGE_LABEL, BREEDING_USE_STAGE_ORDER } from '../../types';
@@ -96,8 +96,9 @@ export function BreedingUseScreen() {
   const erfuellt = zuchtnutzungErfuellt(vorgang.stage);
   const beendet = istBeendet(vorgang.stage);
   const naechste = naechsteStufe(vorgang.stage);
-  const nachzahlungstage = vertrag?.data.backPaymentDays ?? VORGABE_NACHZAHLUNGSTAGE;
-  const nachlass = vertrag?.data.discountCents;
+  const nachzahlungstage =
+    vorgang.backPaymentDays ?? vertrag?.data.backPaymentDays ?? VORGABE_NACHZAHLUNGSTAGE;
+  const nachlass = vorgang.discountCents ?? vertrag?.data.discountCents;
 
   const ton =
     erfuellt || beendet
@@ -110,11 +111,15 @@ export function BreedingUseScreen() {
 
   async function setzeStufe(neu: BreedingUseStage) {
     if (!vorgang) return;
-    await stufeSetzen(vorgang, neu, notiz.trim() || undefined);
-    setNotiz('');
-    setStufenWahlOffen(false);
-    setNotizOffen(false);
-    toast.success(`Neuer Stand: ${BREEDING_USE_STAGE_LABEL[neu]}`);
+    try {
+      await stufeSetzen(vorgang, neu, notiz.trim() || undefined);
+      setNotiz('');
+      setStufenWahlOffen(false);
+      setNotizOffen(false);
+      toast.success(`Neuer Stand: ${BREEDING_USE_STAGE_LABEL[neu]}`);
+    } catch {
+      toast.error('Der neue Stand konnte nicht gespeichert werden.');
+    }
   }
 
   async function verlaengern() {
@@ -126,8 +131,12 @@ export function BreedingUseScreen() {
       confirmLabel: 'Verlängern',
     });
     if (!ok) return;
-    await fristVerlaengern(vorgang);
-    toast.success('Frist verlängert');
+    try {
+      await fristVerlaengern(vorgang);
+      toast.success('Frist verlängert');
+    } catch {
+      toast.error('Die Verlängerung konnte nicht gespeichert werden.');
+    }
   }
 
   async function abbrechen() {
@@ -141,14 +150,22 @@ export function BreedingUseScreen() {
       danger: true,
     });
     if (!ok) return;
-    await stufeSetzen(vorgang, 'cancelled', 'Vorgang abgebrochen');
+    try {
+      await stufeSetzen(vorgang, 'cancelled', 'Vorgang abgebrochen');
+    } catch {
+      toast.error('Der Abbruch konnte nicht gespeichert werden.');
+    }
   }
 
   async function beginnSpeichern() {
     if (!vorgang || !neuerBeginn) return;
-    await fristbeginnSetzen(vorgang, neuerBeginn);
-    setFristOffen(false);
-    toast.success('Fristbeginn geändert');
+    try {
+      await fristbeginnSetzen(vorgang, neuerBeginn);
+      setFristOffen(false);
+      toast.success('Fristbeginn geändert');
+    } catch {
+      toast.error('Der Fristbeginn konnte nicht gespeichert werden.');
+    }
   }
 
   async function notizSpeichern() {
@@ -156,12 +173,16 @@ export function BreedingUseScreen() {
       setNotizOffen(false);
       return;
     }
-    await patch(db.breedingUses, vorgang.id, {
-      history: [...vorgang.history, { stage: vorgang.stage, at: nowISO(), note: notiz.trim() }],
-    });
-    setNotiz('');
-    setNotizOffen(false);
-    toast.success('Notiz gespeichert');
+    try {
+      await patch(db.breedingUses, vorgang.id, {
+        history: [...vorgang.history, { stage: vorgang.stage, at: nowISO(), note: notiz.trim() }],
+      });
+      setNotiz('');
+      setNotizOffen(false);
+      toast.success('Notiz gespeichert');
+    } catch {
+      toast.error('Die Notiz konnte nicht gespeichert werden.');
+    }
   }
 
   const tage = tageBisFrist(vorgang.deadlineDate);
@@ -334,8 +355,16 @@ export function BreedingUseScreen() {
               <ListRow
                 leading={<Icon name="contract" size={19} className="text-text-faint" />}
                 title="Zum Vertrag"
-                subtitle={`Angelegt am ${formatDate(vorgang.startDate)}`}
+                subtitle={`Angelegt am ${formatDate(dateOf(vertrag.createdAt))}`}
                 onClick={() => navigate(`/mehr/vertraege/${vertrag.id}`)}
+              />
+            )}
+            {vertrag === null && (
+              <ListRow
+                leading={<Icon name="contract" size={19} className="text-text-faint" />}
+                title="Vertrag wurde gelöscht"
+                subtitle="Frist, Geldbetrag und Verlauf bleiben hier erhalten"
+                chevron={false}
               />
             )}
           </List>

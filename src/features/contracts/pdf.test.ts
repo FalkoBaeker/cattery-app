@@ -109,6 +109,22 @@ describe('Umlaute und Sonderzeichen', () => {
     expect(await alsLatin1()).toContain('WinAnsiEncoding');
   });
 
+  it('schreibt den Gedankenstrich aus § 6 als WinAnsi-Byte 0x96', async () => {
+    // "– außer bei Verletzung von Leben, Körper oder Gesundheit –"
+    expect(await alsLatin1()).toContain('\u0096 au\u00dfer bei Verletzung');
+  });
+
+  it('schreibt die deutschen Anführungszeichen aus Vertrag B als WinAnsi-Byte 0x84', async () => {
+    // "nachfolgend „Verkäuferin" genannt" — U+201E wird zu 0x84.
+    const roh = await alsLatin1({
+      type: 'breeding_reserved',
+      regularPriceCents: 250_000,
+      discountCents: 138_000,
+      breedingUseStartDate: '2026-06-01',
+    });
+    expect(roh).toContain('\u0084Verk\u00e4uferin" genannt');
+  });
+
   it('nimmt Umlaute in freien Texten mit', async () => {
     const roh = await alsLatin1({
       additionalAgreement: 'Übergabe in Köln, Straße 3. Die Züchterin grüßt.',

@@ -110,15 +110,16 @@ export function WeightChart({
           const showDots = !dense || (focusKittenId ? s.focus : false);
           return (
             <g key={s.kittenId} opacity={s.focus ? 1 : 0.32}>
-              {/* Heller Saum: Halsbandfarben wie Schwarz oder Weiß gehen sonst
-                  im dunklen bzw. hellen Hintergrund unter. */}
-              {s.path && s.focus && focusKittenId && (
+              {/* Heller Saum unter jeder Kurve: Halsbandfarben wie Schwarz
+                  oder Weiß gehen sonst im dunklen bzw. hellen Hintergrund
+                  unter — auch auf der Wurfkurve ohne betrachtetes Kitten. */}
+              {s.path && (
                 <path
                   d={s.path}
                   fill="none"
                   className="text-surface"
                   stroke="currentColor"
-                  strokeWidth={4}
+                  strokeWidth={s.focus ? 4 : 2.6}
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
@@ -140,6 +141,9 @@ export function WeightChart({
                   cy={n.py}
                   r={s.focus ? 2.6 : 1.6}
                   fill={s.hex}
+                  className="text-surface"
+                  stroke="currentColor"
+                  strokeWidth={s.focus ? 1 : 0.7}
                 />
               ))}
               {showDots &&

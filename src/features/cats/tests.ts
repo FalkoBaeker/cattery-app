@@ -45,7 +45,8 @@ export const HEALTH_TEST_STATE_LABEL: Record<HealthTestState, string> = {
   expired: 'Abgelaufen',
 };
 
-export const HEALTH_TEST_STATE_TONE: Record<
+/* Nur intern gebraucht — die Oberfläche bekommt den Ton über `status.tone`. */
+const HEALTH_TEST_STATE_TONE: Record<
   HealthTestState,
   'neutral' | 'ok' | 'warn' | 'alert'
 > = {

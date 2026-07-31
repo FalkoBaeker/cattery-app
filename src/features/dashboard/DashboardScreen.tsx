@@ -7,7 +7,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
   Badge,
@@ -59,6 +59,10 @@ function useDashboardData() {
       healthTests,
       breedingUses,
       interests,
+      documents,
+      contracts,
+      costs,
+      revenues,
     ] = await Promise.all([
       db.cats.toArray(),
       db.litters.toArray(),
@@ -68,7 +72,11 @@ function useDashboardData() {
       db.appointments.toArray(),
       db.healthTests.toArray(),
       db.breedingUses.toArray(),
-      db.interests.filter((i) => !i.deletedAt).toArray(),
+      db.interests.toArray(),
+      db.documents.toArray(),
+      db.contracts.toArray(),
+      db.costs.toArray(),
+      db.revenues.toArray(),
     ]);
     return {
       cats,
@@ -80,6 +88,10 @@ function useDashboardData() {
       healthTests,
       breedingUses,
       interests,
+      documents,
+      contracts,
+      costs,
+      revenues,
     };
   }, []);
 }
@@ -161,6 +173,7 @@ export function DashboardScreen() {
           onSettings={() => navigate('/mehr/einstellungen')}
           onInstall={() => setGuideOpen(true)}
           standalone={install.standalone}
+          showCats={modules.cats}
         />
         <InstallSheet
           open={guideOpen || install.open}
@@ -445,11 +458,13 @@ function FirstRun({
   onSettings,
   onInstall,
   standalone,
+  showCats,
 }: {
   onCats: () => void;
   onSettings: () => void;
   onInstall: () => void;
   standalone: boolean;
+  showCats: boolean;
 }) {
   return (
     <Stack gap="lg">
@@ -457,25 +472,27 @@ function FirstRun({
         <h2 className="text-[1.05rem] font-semibold text-text">Willkommen</h2>
         <p className="mt-1.5 text-[0.92rem] leading-relaxed text-text-dim">
           Die App startet leer. Alles Weitere entsteht mit der Zeit — Wurf für Wurf.
-          Drei Schritte für den Anfang:
+          Das sind die ersten sinnvollen Schritte:
         </p>
       </Card>
 
       <List>
+        {showCats && (
+          <ListRow
+            leading={<StepNumber n={1} />}
+            title="Zuchttiere anlegen"
+            subtitle="Die Königinnen und den Kater eintragen"
+            onClick={onCats}
+          />
+        )}
         <ListRow
-          leading={<StepNumber n={1} />}
-          title="Zuchttiere anlegen"
-          subtitle="Die Königinnen und den Kater eintragen"
-          onClick={onCats}
-        />
-        <ListRow
-          leading={<StepNumber n={2} />}
+          leading={<StepNumber n={showCats ? 2 : 1} />}
           title="Einstellungen ausfüllen"
           subtitle="Name und Anschrift für die Verträge, Zwingername, Verein"
           onClick={onSettings}
         />
         <ListRow
-          leading={<StepNumber n={3} />}
+          leading={<StepNumber n={showCats ? 3 : 2} />}
           title="App zum Home-Bildschirm"
           subtitle={
             standalone ? 'Bereits erledigt' : 'Ohne diesen Schritt kommen keine Erinnerungen an'

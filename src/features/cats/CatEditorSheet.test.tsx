@@ -48,7 +48,10 @@ describe('CatEditorSheet', () => {
   it('verlangt einen Rufnamen und legt sonst nichts an', async () => {
     const { onClose } = renderSheet();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Speichern' }));
+    // Erst warten, bis das Formular da ist — solange die Einstellungen laden,
+    // ist der Speichern-Knopf bewusst gesperrt.
+    await screen.findByLabelText(/Rufname/);
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }));
 
     expect(await screen.findByText('Bitte einen Rufnamen eingeben.')).toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();

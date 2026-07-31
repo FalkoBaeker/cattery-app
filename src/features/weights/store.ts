@@ -1,13 +1,12 @@
 /**
  * Schreibzugriffe des Wiege-Moduls.
  *
- * `WeightEntry` trägt keine Zeitstempel und passt deshalb nicht auf den
- * `patch`-Helfer aus src/db/db.ts (der setzt `updatedAt`). Bis es dort ein
- * Gegenstück für zeitstempellose Datensätze gibt, liegt `patchPlain` hier.
+ * `WeightEntry` trägt keine Zeitstempel und wird deshalb über die Plain-Helfer
+ * aus src/db/db.ts geschrieben.
  */
 
 import type { ID, ISODateTime, WeightEntry } from '../../types';
-import { db, insertPlain, remove } from '../../db/db';
+import { db, insertPlain, patchPlain, remove } from '../../db/db';
 
 /** Neue Messung. Speichert sofort — die Schnellerfassung kennt kein Formular. */
 export async function addWeight(
@@ -24,7 +23,7 @@ export async function updateWeight(
   id: ID,
   changes: Partial<Omit<WeightEntry, 'id' | 'kittenId'>>,
 ): Promise<void> {
-  await db.weights.update(id, changes as never);
+  await patchPlain(db.weights, id, changes);
 }
 
 export async function deleteWeight(id: ID): Promise<void> {

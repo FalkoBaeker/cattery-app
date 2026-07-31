@@ -3,7 +3,7 @@
  */
 
 import { useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
   Badge,
@@ -132,6 +132,7 @@ export function LitterDetailScreen() {
   }
 
   const { litter, kittens, tasks, events, cats, weights, interests, litters } = data;
+  const showWeights = settings.modules.weights;
   const motherName = cats.find((c) => c.id === litter.motherId)?.callName ?? 'Unbekannte Mutter';
   const fatherName =
     cats.find((c) => c.id === litter.fatherId)?.callName ?? litter.fatherExternalName;
@@ -149,11 +150,13 @@ export function LitterDetailScreen() {
 
   function kittenSubtitle(k: Kitten): string {
     const parts: string[] = [SEX_LABEL[k.sex]];
-    const latest = latestByKitten.get(k.id);
-    if (latest) parts.push(formatGrams(latest.grams));
-    else if (k.birthWeightG) parts.push(`Geburt ${formatGrams(k.birthWeightG)}`);
-    const gain = analyses.get(k.id)?.gainPerDay;
-    if (gain != null) parts.push(formatGainPerDay(gain));
+    if (showWeights) {
+      const latest = latestByKitten.get(k.id);
+      if (latest) parts.push(formatGrams(latest.grams));
+      else if (k.birthWeightG) parts.push(`Geburt ${formatGrams(k.birthWeightG)}`);
+      const gain = analyses.get(k.id)?.gainPerDay;
+      if (gain != null) parts.push(formatGainPerDay(gain));
+    }
     return parts.join(' · ');
   }
 
@@ -234,7 +237,7 @@ export function LitterDetailScreen() {
           >
             Geburtsprotokoll
           </Button>
-          {litter.status === 'born' && (
+          {showWeights && litter.status === 'born' && (
             <Button
               size="lg"
               block
@@ -253,7 +256,7 @@ export function LitterDetailScreen() {
           description={
             summary.isEmpty
               ? undefined
-              : inWeighingPhase
+              : showWeights && inWeighingPhase
                 ? `${summaryLine(summary)} · ${weighingLine(summary)}`
                 : summaryLine(summary)
           }
@@ -288,7 +291,7 @@ export function LitterDetailScreen() {
                       trailing={
                         <span className="flex flex-col items-end gap-1">
                           <SaleStatusBadge status={k.saleStatus} />
-                          {level !== 'unknown' && level !== 'ok' && (
+                          {showWeights && level !== 'unknown' && level !== 'ok' && (
                             <Badge tone={WEIGHT_LEVEL_TONE[level]} icon="alert">
                               Gewicht
                             </Badge>
@@ -334,7 +337,7 @@ export function LitterDetailScreen() {
         />
 
         {/* --- Kosten ------------------------------------------------ */}
-        <Section title="Wirtschaftliches">
+        {settings.modules.costs && <Section title="Wirtschaftliches">
           <List>
             <ListRow
               leading={<Icon name="euro" size={20} className="text-text-dim" />}
@@ -343,7 +346,7 @@ export function LitterDetailScreen() {
               onClick={() => navigate('/mehr/kosten')}
             />
           </List>
-        </Section>
+        </Section>}
 
         <p className="px-1 text-[0.78rem] text-text-faint">
           Angelegt am {formatDate(dateOf(litter.createdAt))} · {LITTER_STATUS_LABEL[litter.status]}

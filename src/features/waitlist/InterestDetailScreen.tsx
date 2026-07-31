@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router';
 import { useLiveQuery } from 'dexie-react-hooks';
 
 import {
@@ -114,6 +114,10 @@ function ContactComposer({ interestId }: { interestId: ID }) {
   const [channel, setChannel] = useState<ContactChannel>('call');
   const [text, setText] = useState('');
   const [at, setAt] = useState<string>(() => nowISO());
+  // Solange die Nutzerin den Zeitpunkt nicht selbst anfasst, gilt beim
+  // Speichern „jetzt" — der beim Einhängen gemerkte Wert wäre nach einem
+  // stundenlang offenen Bildschirm längst veraltet.
+  const [atEdited, setAtEdited] = useState(false);
   const [showDate, setShowDate] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -122,9 +126,10 @@ function ContactComposer({ interestId }: { interestId: ID }) {
     if (!clean) return;
     setSaving(true);
     try {
-      await addContactNote(interestId, channel, clean, at);
+      await addContactNote(interestId, channel, clean, atEdited ? at : nowISO());
       setText('');
       setAt(nowISO());
+      setAtEdited(false);
       setShowDate(false);
       toast.success('Im Verlauf festgehalten');
     } catch {
@@ -158,17 +163,25 @@ function ContactComposer({ interestId }: { interestId: ID }) {
           type="datetime-local"
           value={toLocalInputValue(at)}
           onChange={(e) => {
-            if (e.target.value) setAt(fromLocalInputValue(e.target.value));
+            if (e.target.value) {
+              setAt(fromLocalInputValue(e.target.value));
+              setAtEdited(true);
+            }
           }}
         />
       ) : (
         <button
           type="button"
-          onClick={() => setShowDate(true)}
+          onClick={() => {
+            // Beim Aufklappen mit der aktuellen Zeit starten — nicht mit dem
+            // Wert vom Einhängen des Bildschirms.
+            if (!atEdited) setAt(nowISO());
+            setShowDate(true);
+          }}
           className="flex min-h-11 items-center gap-1.5 self-start px-1 text-[0.85rem] text-text-dim active:text-text"
         >
           <Icon name="clock" size={16} />
-          {formatDateTime(at)}
+          {atEdited ? formatDateTime(at) : 'jetzt'}
           <span className="text-accent">ändern</span>
         </button>
       )}
@@ -203,7 +216,12 @@ function ContactNoteSheet({
 
   async function save() {
     if (!note) return;
-    await updateContactNote(note.id, { channel, text: text.trim(), at });
+    try {
+      await updateContactNote(note.id, { channel, text: text.trim(), at });
+    } catch {
+      toast.error('Die Änderung ließ sich nicht speichern.');
+      return;
+    }
     toast.success('Gespeichert');
     onClose();
   }
@@ -217,7 +235,12 @@ function ContactNoteSheet({
       danger: true,
     });
     if (!ok) return;
-    await deleteContactNote(note.id);
+    try {
+      await deleteContactNote(note.id);
+    } catch {
+      toast.error('Der Eintrag ließ sich nicht löschen.');
+      return;
+    }
     toast.show('Eintrag gelöscht.');
     onClose();
   }
@@ -379,7 +402,12 @@ function KittenLinkSheet({
   }, [open, interest.kittenId]);
 
   async function choose(kittenId?: ID) {
-    await setReservedKitten(interest, kittenId);
+    try {
+      await setReservedKitten(interest, kittenId);
+    } catch {
+      toast.error('Die Verknüpfung ließ sich nicht speichern.');
+      return;
+    }
     toast.success(kittenId ? 'Kitten verknüpft' : 'Verknüpfung gelöst');
     onClose();
   }
@@ -531,19 +559,36 @@ export function InterestDetailScreen() {
         danger: true,
       });
       if (!ok) return;
-      await setInterestStatus(interest, next);
+      try {
+        await setInterestStatus(interest, next);
+      } catch {
+        toast.error('Der Status ließ sich nicht ändern.');
+        return;
+      }
       toast.show('In den Papierkorb verschoben.');
       navigate('/warteliste');
       return;
     }
 
-    await setInterestStatus(interest, next);
+    try {
+      await setInterestStatus(interest, next);
+    } catch {
+      toast.error('Der Status ließ sich nicht ändern.');
+      return;
+    }
     if (next === 'reserved' && !interest.kittenId) setKittenOpen(true);
   }
 
-  async function patchInterest(changes: Partial<Interest>) {
-    if (!interest) return;
-    await updateInterest(interest.id, changes);
+  /** Liefert zurück, ob das Speichern geklappt hat — Blätter schließen nur dann. */
+  async function patchInterest(changes: Partial<Interest>): Promise<boolean> {
+    if (!interest) return false;
+    try {
+      await updateInterest(interest.id, changes);
+      return true;
+    } catch {
+      toast.error('Die Änderung ließ sich nicht speichern.');
+      return false;
+    }
   }
 
   /* --- Anzeige ---------------------------------------------------- */
@@ -848,7 +893,7 @@ export function InterestDetailScreen() {
             variant="ghost"
             size="sm"
             onClick={async () => {
-              await patchInterest({ notes: noteDraft.trim() || undefined });
+              if (!(await patchInterest({ notes: noteDraft.trim() || undefined }))) return;
               setNotesOpen(false);
               toast.success('Gespeichert');
             }}
@@ -875,7 +920,8 @@ export function InterestDetailScreen() {
             variant="ghost"
             size="sm"
             onClick={async () => {
-              await patchInterest({ householdNote: householdDraft.trim() || undefined });
+              if (!(await patchInterest({ householdNote: householdDraft.trim() || undefined })))
+                return;
               setHouseholdOpen(false);
               toast.success('Gespeichert');
             }}

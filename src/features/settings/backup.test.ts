@@ -21,6 +21,7 @@ import {
 import { clearSettingsCache, db, wipeDatabase } from '../../db/db';
 import { DEFAULT_SETTINGS } from '../../types';
 import type { Attachment } from '../../types';
+import e2eBackupText from '../../test/fixtures/e2e-backup.json?raw';
 
 const STAMP = { createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' };
 
@@ -31,6 +32,21 @@ const STAMP = { createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00
  */
 function storableBlob(text: string, type = 'text/plain'): Blob {
   return new NodeBlob([text], { type }) as unknown as Blob;
+}
+
+function emptyBackupTables(): Record<string, unknown> {
+  return Object.fromEntries(BACKUP_TABLE_NAMES.map((name) => [name, []]));
+}
+
+function completeBackup(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    format: BACKUP_FORMAT,
+    version: BACKUP_VERSION,
+    createdAt: '2026-05-01T10:00:00.000Z',
+    tables: emptyBackupTables(),
+    attachments: [],
+    ...overrides,
+  };
 }
 
 /** Legt in jeder Tabelle mindestens einen Datensatz an. */
@@ -221,8 +237,9 @@ describe('Anhänge', () => {
     const encoded = await encodeAttachment(original);
     expect(encoded.data.length).toBeGreaterThan(0);
     expect(encoded.width).toBe(800);
+    expect(encoded.sha256).toMatch(/^[a-f0-9]{64}$/);
 
-    const decoded = decodeAttachment(encoded);
+    const decoded = await decodeAttachment(encoded);
     expect(decoded.id).toBe('att-x');
     expect(decoded.mime).toBe('image/jpeg');
     expect(decoded.bytes).toBe(encoded.bytes);
@@ -230,8 +247,8 @@ describe('Anhänge', () => {
     expect(text).toBe('Impfpass Seite 1');
   });
 
-  it('setzt eine sinnvolle Vorgabe, wenn die Art fehlt', () => {
-    const decoded = decodeAttachment({
+  it('setzt eine sinnvolle Vorgabe, wenn die Art fehlt', async () => {
+    const decoded = await decodeAttachment({
       id: 'a',
       mime: '',
       bytes: 0,
@@ -240,6 +257,19 @@ describe('Anhänge', () => {
     });
     expect(decoded.mime).toBe('application/octet-stream');
     expect(decoded.bytes).toBe(0);
+  });
+
+  it('lehnt einen Anhang mit falscher Prüfsumme ab', async () => {
+    const encoded = await encodeAttachment({
+      id: 'att-check',
+      blob: storableBlob('unverändert'),
+      mime: 'text/plain',
+      bytes: 11,
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+    await expect(
+      decodeAttachment({ ...encoded, sha256: '0'.repeat(64) }),
+    ).rejects.toThrow(/beschädigt/);
   });
 });
 
@@ -328,6 +358,46 @@ describe('Sicherung über alle Tabellen', () => {
     expect(await db.cats.count()).toBe(1);
   });
 
+  it('lässt bei einem kaputten Datensatz die bisherigen Daten unangetastet (Alles-oder-nichts)', async () => {
+    await fillDatabase();
+    const intact = await createBackup();
+
+    // Eine Sicherung, deren Kitten-Abschnitt einen Datensatz ohne Kennung
+    // enthält — das Einspielen muss mittendrin scheitern …
+    const broken: BackupFile = {
+      ...intact,
+      tables: { ...intact.tables, kittens: [{ kaputt: true }] },
+    };
+
+    await expect(restoreBackup(broken)).rejects.toBeTruthy();
+
+    // … und zwar so, dass alles Bisherige unverändert stehen bleibt.
+    for (const name of BACKUP_TABLE_NAMES) {
+      expect(await db.table(name).count(), `Tabelle ${name}`).toBe(1);
+    }
+    expect((await db.cats.get('cat-1'))?.callName).toBe('Mira');
+    expect((await db.kittens.get('kit-1'))?.birthWeightG).toBe(94);
+    expect(await db.attachments.count()).toBe(1);
+  });
+
+  it('bricht bei einem kaputten Anhang ab, bevor irgendetwas gelöscht wird', async () => {
+    await fillDatabase();
+    const intact = await createBackup();
+
+    const broken: BackupFile = {
+      ...intact,
+      attachments: [{ ...intact.attachments[0], data: '%%%kein-base64%%%' }],
+    };
+
+    await expect(restoreBackup(broken)).rejects.toBeTruthy();
+
+    for (const name of BACKUP_TABLE_NAMES) {
+      expect(await db.table(name).count(), `Tabelle ${name}`).toBe(1);
+    }
+    expect(await db.attachments.count()).toBe(1);
+    expect((await db.attachments.get('att-1'))?.mime).toBe('text/plain');
+  });
+
   it('zählt den Inhalt für die Rückfrage auf', async () => {
     await fillDatabase();
     const file = await createBackup();
@@ -393,58 +463,194 @@ describe('parseBackup — beschädigte und fremde Dateien', () => {
 
   it('lehnt einen beschädigten Abschnitt ab und benennt ihn deutsch', () => {
     const result = parseBackup(
-      JSON.stringify({
-        format: BACKUP_FORMAT,
-        version: 1,
-        tables: { cats: 'kaputt' },
-        attachments: [],
-      }),
+      JSON.stringify(
+        completeBackup({
+          tables: { ...emptyBackupTables(), cats: 'kaputt' },
+        }),
+      ),
     );
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error).toContain('Zuchttiere');
   });
 
-  it('lehnt einen beschädigten Anhang-Abschnitt ab', () => {
+  it('lehnt semantisch unvollständige Datensätze vor jeder Wiederherstellung ab', () => {
     const result = parseBackup(
-      JSON.stringify({ format: BACKUP_FORMAT, version: 1, tables: {}, attachments: 42 }),
+      JSON.stringify(
+        completeBackup({
+          tables: { ...emptyBackupTables(), cats: [{ id: 'broken' }] },
+        }),
+      ),
     );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toContain('Zuchttiere');
+    expect(result.error).toMatch(/unvollständig|beschädigt/);
+  });
+
+  it('lehnt unbekannte Aufzählungswerte und doppelte Kennungen ab', () => {
+    const cat = {
+      id: 'cat-1',
+      callName: 'Mira',
+      sex: 'female',
+      breed: 'Russisch Blau',
+      status: 'active',
+      isOwn: true,
+      ...STAMP,
+    };
+
+    const invalidEnum = parseBackup(
+      JSON.stringify(
+        completeBackup({
+          tables: {
+            ...emptyBackupTables(),
+            cats: [{ ...cat, status: 'irgendwas' }],
+          },
+        }),
+      ),
+    );
+    expect(invalidEnum.ok).toBe(false);
+
+    const duplicate = parseBackup(
+      JSON.stringify(
+        completeBackup({
+          tables: { ...emptyBackupTables(), cats: [cat, { ...cat }] },
+        }),
+      ),
+    );
+    expect(duplicate.ok).toBe(false);
+    if (duplicate.ok) return;
+    expect(duplicate.error).toContain('doppelt');
+  });
+
+  it('lehnt tote Referenzen ab, statt unsichtbare Datensätze einzuspielen', () => {
+    const result = parseBackup(
+      JSON.stringify(
+        completeBackup({
+          tables: {
+            ...emptyBackupTables(),
+            weights: [
+              {
+                id: 'weight-1',
+                kittenId: 'fehlt',
+                at: '2026-05-01T10:00:00.000Z',
+                grams: 120,
+              },
+            ],
+          },
+        }),
+      ),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toContain('Kitten-Gewichte');
+    expect(result.error).toContain('fehlendes Kitten');
+  });
+
+  it('lehnt einen beschädigten Anhang-Abschnitt ab', () => {
+    const result = parseBackup(JSON.stringify(completeBackup({ attachments: 42 })));
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error).toContain('Anhänge');
   });
 
-  it('ergänzt fehlende Tabellen einer älteren Sicherung als leer', () => {
-    const result = parseBackup(
-      JSON.stringify({
-        format: BACKUP_FORMAT,
-        version: 1,
-        createdAt: '2026-05-01T10:00:00.000Z',
-        tables: { cats: [] },
-      }),
-    );
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    for (const name of BACKUP_TABLE_NAMES) {
-      expect(Array.isArray(result.file.tables[name])).toBe(true);
-    }
-    expect(result.file.attachments).toEqual([]);
-    expect(result.file.createdAt).toBe('2026-05-01T10:00:00.000Z');
+  it('lehnt eine Sicherung mit fehlender Tabelle ab, statt sie als leer einzuspielen', () => {
+    const tables = emptyBackupTables();
+    delete tables.weights;
+    const result = parseBackup(JSON.stringify(completeBackup({ version: 1, tables })));
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toContain('Kitten-Gewichte');
   });
 
-  it('wirft halbe Anhänge weg, statt daran zu scheitern', () => {
+  it('lehnt einen fehlenden Anhang-Abschnitt ab', () => {
+    const raw = completeBackup();
+    delete raw.attachments;
+    const result = parseBackup(JSON.stringify(raw));
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toContain('Anhänge');
+  });
+
+  it('lehnt jeden unvollständigen Anhang ab, statt ihn still wegzuwerfen', () => {
     const result = parseBackup(
-      JSON.stringify({
-        format: BACKUP_FORMAT,
-        version: 1,
-        tables: {},
-        attachments: [{ id: 'gut', data: '' }, { id: 'ohne-daten' }, null, 'unsinn'],
-      }),
+      JSON.stringify(
+        completeBackup({
+          version: 1,
+          attachments: [
+            {
+              id: 'ohne-daten',
+              mime: 'application/pdf',
+              bytes: 10,
+              createdAt: '2026-05-01T10:00:00.000Z',
+            },
+          ],
+        }),
+      ),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toMatch(/unvollständig|beschädigt/);
+  });
+
+  it('verlangt ab Version 2 eine Prüfsumme je Anhang', () => {
+    const result = parseBackup(
+      JSON.stringify(
+        completeBackup({
+          attachments: [
+            {
+              id: 'ohne-pruefsumme',
+              mime: 'application/pdf',
+              bytes: 0,
+              createdAt: '2026-05-01T10:00:00.000Z',
+              data: '',
+            },
+          ],
+        }),
+      ),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toContain('Prüfsumme');
+  });
+
+  it('akzeptiert vollständige Sicherungen der Version 1 weiterhin ohne Prüfsumme', () => {
+    const result = parseBackup(
+      JSON.stringify(
+        completeBackup({
+          version: 1,
+          attachments: [
+            {
+              id: 'alt',
+              mime: 'application/pdf',
+              bytes: 0,
+              createdAt: '2026-05-01T10:00:00.000Z',
+              data: '',
+            },
+          ],
+        }),
+      ),
     );
     expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.file.attachments).toHaveLength(1);
-    expect(result.file.attachments[0].id).toBe('gut');
+  });
+});
+
+describe('realistische Prüfsicherung', () => {
+  it('lässt sich vollständig lesen und mitsamt Anhang wiederherstellen', async () => {
+    const parsed = parseBackup(e2eBackupText);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+
+    await restoreBackup(parsed.file);
+
+    expect(await db.cats.count()).toBe(2);
+    expect((await db.cats.get('cat-mascha'))?.callName).toBe('Mascha');
+    expect(await db.kittens.count()).toBe(2);
+    expect(await db.weights.count()).toBe(14);
+    expect(await db.documents.count()).toBe(1);
+    expect(await db.attachments.count()).toBe(1);
+    expect((await db.attachments.toArray())[0].mime).toBe('image/png');
+    expect((await db.settings.toArray())[0].seller.name).toBe('Beispiel Züchterin');
   });
 });
 

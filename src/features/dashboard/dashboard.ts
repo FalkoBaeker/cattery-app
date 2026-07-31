@@ -12,6 +12,9 @@ import type {
   BreedingUse,
   CareTask,
   Cat,
+  Contract,
+  CostEntry,
+  DocumentRec,
   HealthTest,
   ID,
   ISODate,
@@ -19,13 +22,14 @@ import type {
   Interest,
   Kitten,
   Litter,
+  RevenueEntry,
   Settings,
   WeightEntry,
 } from '../../types';
 import { HEALTH_TEST_LABEL, kittenLabel } from '../../types';
 import { analyzeWeights, litterAverageWeight, type WeightLevel } from '../../domain/weight';
 import { isActionable } from '../../domain/schedule';
-import { dateOf, daysBetween, formatDate } from '../../lib/date';
+import { addDays, dateOf, daysBetween, formatDate } from '../../lib/date';
 
 /* ------------------------------------------------------------------ */
 /*  Wiege-Rhythmus                                                     */
@@ -129,6 +133,10 @@ export interface DashboardInput {
   healthTests: HealthTest[];
   breedingUses: BreedingUse[];
   interests: Interest[];
+  documents: DocumentRec[];
+  contracts: Contract[];
+  costs: CostEntry[];
+  revenues: RevenueEntry[];
   /** Zeitpunkt der letzten Sicherung; kommt aus den Einstellungen. */
   lastBackupAt?: ISODateTime;
 }
@@ -247,6 +255,15 @@ export function buildDashboard(input: DashboardInput): DashboardModel {
     let pending = 0;
     for (const k of litterKittens) {
       const entries = weightsByKitten.get(k.id) ?? [];
+      if (phase === 'daily') {
+        // In Woche 1–2 sind zwei echte Messungen pro Kalendertag vorgesehen.
+        // Eine einzelne Morgenmessung darf die Erinnerung für den zweiten
+        // Tageswert nicht bereits als erledigt markieren.
+        const measurementsToday = entries.filter((entry) => dateOf(entry.at) === today).length;
+        if (measurementsToday < 2) pending += 1;
+        continue;
+      }
+
       const lastAt = entries.reduce<string | undefined>(
         (acc, e) => (acc === undefined || e.at > acc ? e.at : acc),
         undefined,
@@ -256,7 +273,7 @@ export function buildDashboard(input: DashboardInput): DashboardModel {
         continue;
       }
       const daysSince = daysBetween(dateOf(lastAt), today);
-      if (phase === 'daily' ? daysSince >= 1 : daysSince >= 2) pending += 1;
+      if (daysSince >= 2) pending += 1;
     }
 
     if (pending === 0) continue;
@@ -279,7 +296,7 @@ export function buildDashboard(input: DashboardInput): DashboardModel {
 
   /* --- Termine heute und morgen ------------------------------------ */
 
-  const tomorrow = addDay(today, 1);
+  const tomorrow = addDays(today, 1);
   const activeAppointments = input.appointments
     .filter((a) => !a.cancelledAt)
     .sort((a, b) => a.startAt.localeCompare(b.startAt));
@@ -344,8 +361,16 @@ export function buildDashboard(input: DashboardInput): DashboardModel {
     input.cats.length > 0 ||
     input.litters.length > 0 ||
     input.kittens.length > 0 ||
+    input.weights.length > 0 ||
+    input.careTasks.length > 0 ||
+    input.healthTests.length > 0 ||
+    input.breedingUses.length > 0 ||
     input.interests.length > 0 ||
-    input.appointments.length > 0;
+    input.appointments.length > 0 ||
+    input.documents.length > 0 ||
+    input.contracts.length > 0 ||
+    input.costs.length > 0 ||
+    input.revenues.length > 0;
 
   const backup = backupStatus(input.lastBackupAt, settings.backupIntervalDays, today, hasAnyData);
 
@@ -376,14 +401,6 @@ export function buildDashboard(input: DashboardInput): DashboardModel {
 /* ------------------------------------------------------------------ */
 /*  Einzelteile                                                        */
 /* ------------------------------------------------------------------ */
-
-/** Ein Tag weiter — bewusst über die Datumshelfer, nie über new Date(String). */
-function addDay(d: ISODate, days: number): ISODate {
-  const [y, m, day] = d.split('-').map(Number);
-  const x = new Date(y, (m ?? 1) - 1, (day ?? 1) + days);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${x.getFullYear()}-${pad(x.getMonth() + 1)}-${pad(x.getDate())}`;
-}
 
 function taskContext(
   task: CareTask,

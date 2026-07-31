@@ -346,13 +346,20 @@ function drawCurve(
   ctx.lineWidth = Math.max(2, 5 * scale);
   ctx.stroke();
 
-  // Beschriftung: von … bis
+  // Beschriftung: erster und letzter Tageswert, nicht Minimum und Maximum.
+  // Bei einer zwischenzeitlichen Abnahme wäre „min → max" irreführend.
+  const ordered = samples
+    .filter((sample) => sample.date && Number.isFinite(sample.grams) && sample.grams > 0)
+    .slice()
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const firstGrams = ordered[0]?.grams ?? geo.minGrams;
+  const lastGrams = ordered.at(-1)?.grams ?? geo.maxGrams;
   ctx.font = `${Math.round(24 * scale)}px ${SANS}`;
   ctx.fillStyle = INK_SOFT;
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
   ctx.fillText(
-    `${Math.round(geo.minGrams)} g → ${Math.round(geo.maxGrams)} g`,
+    `${Math.round(firstGrams)} g → ${Math.round(lastGrams)} g`,
     box.x + Math.round(22 * scale),
     box.y + Math.round(16 * scale),
   );

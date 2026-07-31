@@ -162,19 +162,39 @@ export async function updateSaleStatus(
  * damit die Warteliste dieselbe Verbindung sieht.
  */
 export async function linkInterest(kitten: Kitten, interestId?: ID): Promise<void> {
-  const previous = kitten.interestId;
-  if (previous === interestId) return;
+  await db.transaction('rw', db.kittens, db.interests, async () => {
+    const current = await db.kittens.get(kitten.id);
+    if (!current || current.interestId === interestId) return;
 
-  await patch(db.kittens, kitten.id, { interestId });
+    // Eine nicht mehr vorhandene Zielkennung darf die aktuelle Verbindung
+    // nicht beschädigen.
+    const next = interestId ? await db.interests.get(interestId) : undefined;
+    if (interestId && !next) return;
 
-  if (previous) {
-    const old = await db.interests.get(previous);
-    if (old?.kittenId === kitten.id) await patch(db.interests, previous, { kittenId: undefined });
-  }
-  if (interestId) {
-    const next = await db.interests.get(interestId);
-    if (next) await patch(db.interests, interestId, { kittenId: kitten.id });
-  }
+    if (current.interestId) {
+      const old = await db.interests.get(current.interestId);
+      if (old?.kittenId === current.id) {
+        await patch(db.interests, old.id, { kittenId: undefined });
+      }
+    }
+
+    if (next?.kittenId && next.kittenId !== current.id) {
+      const formerlyLinked = await db.kittens.get(next.kittenId);
+      if (formerlyLinked?.interestId === next.id) {
+        const saleStatus =
+          formerlyLinked.saleStatus === 'reserved' || formerlyLinked.saleStatus === 'sold'
+            ? 'available'
+            : formerlyLinked.saleStatus;
+        await patch(db.kittens, formerlyLinked.id, {
+          interestId: undefined,
+          saleStatus,
+        });
+      }
+    }
+
+    await patch(db.kittens, current.id, { interestId });
+    if (next) await patch(db.interests, next.id, { kittenId: current.id });
+  });
 }
 
 /** Behutsam: verstorben vermerken, mit Datum und Notiz. */
@@ -203,18 +223,164 @@ export async function revokeKittenDeath(kitten: Kitten, settings: Settings): Pro
   await syncLitterSchedule(kitten.litterId, settings);
 }
 
-/** Löscht ein Kitten mitsamt Wiegungen, Protokolleinträgen und Aufgaben. */
-export async function deleteKitten(kitten: Kitten, settings: Settings): Promise<void> {
-  await db.weights.where('kittenId').equals(kitten.id).delete();
-  await db.careTasks.where('kittenId').equals(kitten.id).delete();
-  await db.birthEvents.where('litterId').equals(kitten.litterId).and((e) => e.kittenId === kitten.id).delete();
-  if (kitten.interestId) {
-    const interest = await db.interests.get(kitten.interestId);
-    if (interest?.kittenId === kitten.id)
-      await patch(db.interests, kitten.interestId, { kittenId: undefined });
+/**
+ * Löst Verweise auf gelöschte Kitten, ohne historische Dokumente, Termine
+ * oder Geldbewegungen zu vernichten.
+ *
+ * Muss innerhalb einer Transaktion aufgerufen werden, die alle hier
+ * verwendeten Tabellen umfasst.
+ */
+async function clearKittenReferences(kittenIds: ID[]): Promise<void> {
+  if (kittenIds.length === 0) return;
+  const ids = new Set(kittenIds);
+
+  const interests = await db.interests.where('kittenId').anyOf(kittenIds).toArray();
+  for (const interest of interests) {
+    await patch(db.interests, interest.id, { kittenId: undefined });
   }
-  await db.kittens.delete(kitten.id);
-  await syncLitterSchedule(kitten.litterId, settings);
+
+  const documents = await db.documents.where('kittenId').anyOf(kittenIds).toArray();
+  for (const document of documents) {
+    await patch(db.documents, document.id, { kittenId: undefined });
+  }
+
+  const costs = await db.costs.where('kittenId').anyOf(kittenIds).toArray();
+  for (const cost of costs) await patch(db.costs, cost.id, { kittenId: undefined });
+
+  const revenues = await db.revenues.where('kittenId').anyOf(kittenIds).toArray();
+  for (const revenue of revenues) await patch(db.revenues, revenue.id, { kittenId: undefined });
+
+  const uses = await db.breedingUses.where('kittenId').anyOf(kittenIds).toArray();
+  for (const use of uses) await patch(db.breedingUses, use.id, { kittenId: undefined });
+
+  const appointments = (await db.appointments.toArray()).filter((appointment) =>
+    appointment.kittenIds?.some((id) => ids.has(id)),
+  );
+  for (const appointment of appointments) {
+    const remaining = appointment.kittenIds?.filter((id) => !ids.has(id)) ?? [];
+    await patch(db.appointments, appointment.id, {
+      kittenIds: remaining.length > 0 ? remaining : undefined,
+    });
+  }
+
+  // Die Tierdaten im Vertrag sind eine historische Momentaufnahme und
+  // bleiben lesbar. Nur die interne Kennung des inzwischen gelöschten
+  // Kittens wird entfernt; Name, Geschlecht und ein vorhandenes PDF ändern
+  // sich dadurch inhaltlich nicht.
+  const contracts = (await db.contracts.toArray()).filter((contract) =>
+    contract.data.animals.some((animal) => animal.kittenId && ids.has(animal.kittenId)),
+  );
+  for (const contract of contracts) {
+    await patch(db.contracts, contract.id, {
+      data: {
+        ...contract.data,
+        animals: contract.data.animals.map((animal) =>
+          animal.kittenId && ids.has(animal.kittenId)
+            ? { ...animal, kittenId: undefined }
+            : animal,
+        ),
+      },
+    });
+  }
+}
+
+/** Löscht ein Kitten atomar mitsamt Wiegungen, Protokolleinträgen, Aufgaben und Foto. */
+export async function deleteKitten(kitten: Kitten, settings: Settings): Promise<void> {
+  await db.transaction(
+    'rw',
+    [
+      db.kittens,
+      db.weights,
+      db.careTasks,
+      db.birthEvents,
+      db.interests,
+      db.documents,
+      db.costs,
+      db.revenues,
+      db.breedingUses,
+      db.appointments,
+      db.contracts,
+      db.attachments,
+      db.litters,
+    ],
+    async () => {
+      await clearKittenReferences([kitten.id]);
+      await db.weights.where('kittenId').equals(kitten.id).delete();
+      await db.careTasks.where('kittenId').equals(kitten.id).delete();
+      await db.birthEvents
+        .where('litterId')
+        .equals(kitten.litterId)
+        .and((event) => event.kittenId === kitten.id)
+        .delete();
+      await db.kittens.delete(kitten.id);
+      if (kitten.photoAttachmentId) await db.attachments.delete(kitten.photoAttachmentId);
+      await syncLitterSchedule(kitten.litterId, settings);
+    },
+  );
+}
+
+/**
+ * Löscht einen Wurf und seine operativen Kinddaten atomar.
+ * Historische Verträge, Dokumente, Termine und Finanzeinträge bleiben erhalten;
+ * nur ihre nicht mehr gültigen Verknüpfungen werden gelöst.
+ */
+export async function deleteLitterCascade(litterId: ID): Promise<void> {
+  await db.transaction(
+    'rw',
+    [
+      db.litters,
+      db.kittens,
+      db.weights,
+      db.careTasks,
+      db.birthEvents,
+      db.interests,
+      db.documents,
+      db.costs,
+      db.revenues,
+      db.breedingUses,
+      db.appointments,
+      db.contracts,
+      db.attachments,
+    ],
+    async () => {
+      const kittens = await db.kittens.where('litterId').equals(litterId).toArray();
+      const kittenIds = kittens.map((kitten) => kitten.id);
+      await clearKittenReferences(kittenIds);
+
+      const documents = await db.documents.where('litterId').equals(litterId).toArray();
+      for (const document of documents) {
+        await patch(db.documents, document.id, { litterId: undefined });
+      }
+
+      const costs = await db.costs.where('litterId').equals(litterId).toArray();
+      for (const cost of costs) await patch(db.costs, cost.id, { litterId: undefined });
+
+      const revenues = await db.revenues.where('litterId').equals(litterId).toArray();
+      for (const revenue of revenues) await patch(db.revenues, revenue.id, { litterId: undefined });
+
+      const appointments = await db.appointments.where('litterId').equals(litterId).toArray();
+      for (const appointment of appointments) {
+        await patch(db.appointments, appointment.id, { litterId: undefined });
+      }
+
+      const contracts = await db.contracts.where('litterId').equals(litterId).toArray();
+      for (const contract of contracts) {
+        await patch(db.contracts, contract.id, { litterId: undefined });
+      }
+
+      if (kittenIds.length > 0) {
+        await db.weights.where('kittenId').anyOf(kittenIds).delete();
+      }
+      await db.careTasks.where('litterId').equals(litterId).delete();
+      await db.birthEvents.where('litterId').equals(litterId).delete();
+      await db.kittens.where('litterId').equals(litterId).delete();
+      const photoIds = kittens
+        .map((kitten) => kitten.photoAttachmentId)
+        .filter((id): id is ID => Boolean(id));
+      if (photoIds.length > 0) await db.attachments.bulkDelete(photoIds);
+      await db.litters.delete(litterId);
+    },
+  );
 }
 
 /* ------------------------------------------------------------------ */

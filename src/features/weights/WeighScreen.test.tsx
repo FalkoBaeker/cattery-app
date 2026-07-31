@@ -4,9 +4,9 @@
  */
 
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import { db, wipeDatabase } from '../../db/db';
 import type { Kitten } from '../../types';
 import { ConfirmProvider, ToastProvider } from '../../ui';
@@ -78,15 +78,19 @@ describe('WeighScreen', () => {
 
     const rot = await screen.findByLabelText('Gewicht von Rot in Gramm');
     await user.click(rot);
-    await user.keyboard('95{Enter}');
-
-    await waitFor(async () => expect(await db.weights.count()).toBe(1));
+    await user.keyboard('95');
+    await act(async () => {
+      fireEvent.keyDown(rot, { key: 'Enter' });
+      await vi.waitFor(async () => expect(await db.weights.count()).toBe(1));
+    });
     const entry = (await db.weights.toArray())[0];
     expect(entry.kittenId).toBe('k1');
     expect(entry.grams).toBe(95);
 
     // Fokus steht jetzt auf dem nächsten Kitten.
     expect(document.activeElement?.id).toBe('weigh-k2');
+    expect(screen.getByText('95 g gespeichert')).toBeInTheDocument();
+    expect(await screen.findByText('1 von 3 gewogen')).toBeInTheDocument();
     // Das eben benutzte Feld ist wieder leer.
     expect((rot as HTMLInputElement).value).toBe('');
   });
@@ -113,10 +117,16 @@ describe('WeighScreen', () => {
     const rot = await screen.findByLabelText('Gewicht von Rot in Gramm');
     await user.click(rot);
     await user.keyboard('101');
-    await user.click(screen.getByLabelText('Gewicht von Grün in Gramm'));
-
-    await waitFor(async () => expect(await db.weights.count()).toBe(1));
+    await act(async () => {
+      (screen.getByLabelText('Gewicht von Grün in Gramm') as HTMLInputElement).focus();
+      await vi.waitFor(async () => expect(await db.weights.count()).toBe(1));
+    });
     expect((await db.weights.toArray())[0].grams).toBe(101);
+    // Der Datenbankschreibvorgang ist einen Augenblick vor den davon
+    // abhängigen React-Zuständen fertig. Auch deren sichtbares Ergebnis
+    // gehört zu dieser Interaktion und muss vor Testende angekommen sein.
+    expect(await screen.findByText('101 g gespeichert')).toBeInTheDocument();
+    expect(await screen.findByText('1 von 3 gewogen')).toBeInTheDocument();
   });
 
   it('meldet unsinnige Eingaben auf Deutsch und speichert nichts', async () => {
@@ -139,15 +149,22 @@ describe('WeighScreen', () => {
 
     const rot = await screen.findByLabelText('Gewicht von Rot in Gramm');
     await user.click(rot);
-    await user.keyboard('95{Enter}');
+    await user.keyboard('95');
+    await act(async () => {
+      fireEvent.keyDown(rot, { key: 'Enter' });
+      await vi.waitFor(async () => expect(await db.weights.count()).toBe(1));
+    });
     expect(await screen.findByText('1 von 3 gewogen')).toBeInTheDocument();
 
     // Zweite Wiegung am selben Tag ist der Normalfall.
     await user.click(rot);
-    await user.keyboard('99{Enter}');
-    await waitFor(async () => expect(await db.weights.count()).toBe(2));
+    await user.keyboard('99');
+    await act(async () => {
+      fireEvent.keyDown(rot, { key: 'Enter' });
+      await vi.waitFor(async () => expect(await db.weights.count()).toBe(2));
+    });
     expect(await screen.findByText('1 von 3 gewogen')).toBeInTheDocument();
-    expect(await screen.findByText('2×')).toBeInTheDocument();
+    expect(await screen.findByText('2× erfasst')).toBeInTheDocument();
   });
 
   it('nimmt eine gerade gespeicherte Messung wieder zurück', async () => {
@@ -156,8 +173,11 @@ describe('WeighScreen', () => {
 
     const rot = await screen.findByLabelText('Gewicht von Rot in Gramm');
     await user.click(rot);
-    await user.keyboard('95{Enter}');
-    await waitFor(async () => expect(await db.weights.count()).toBe(1));
+    await user.keyboard('95');
+    await act(async () => {
+      fireEvent.keyDown(rot, { key: 'Enter' });
+      await vi.waitFor(async () => expect(await db.weights.count()).toBe(1));
+    });
 
     // Zurücknehmen geht an zwei Stellen: in der Zeile und in der Meldung.
     await waitFor(() =>
@@ -165,8 +185,10 @@ describe('WeighScreen', () => {
     );
     expect(screen.getAllByRole('button', { name: 'Rückgängig' }).length).toBeGreaterThan(1);
 
-    await user.click(within(container).getByRole('button', { name: 'Rückgängig' }));
-    await waitFor(async () => expect(await db.weights.count()).toBe(0));
+    await act(async () => {
+      fireEvent.click(within(container).getByRole('button', { name: 'Rückgängig' }));
+      await vi.waitFor(async () => expect(await db.weights.count()).toBe(0));
+    });
     await waitFor(() =>
       expect(within(container).queryByRole('button', { name: 'Rückgängig' })).toBeNull(),
     );

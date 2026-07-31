@@ -90,6 +90,10 @@ export function DocumentEditorSheet({
   const cameraInput = useRef<HTMLInputElement>(null);
   const libraryInput = useRef<HTMLInputElement>(null);
   const pagesRef = useRef<EditorPage[]>([]);
+  // Für Wettläufe: die Kamera-Verarbeitung kann fertig werden, nachdem das
+  // Blatt schon geschlossen wurde — dann dürfen keine Seiten mehr in den
+  // Zustand wandern, sonst lecken ihre Objekt-URLs bis zum nächsten Öffnen.
+  const openRef = useRef(false);
 
   const [kind, setKind] = useState<DocumentKind>(defaults?.kind ?? 'vaccination_card');
   const [title, setTitle] = useState('');
@@ -106,6 +110,7 @@ export function DocumentEditorSheet({
   const [editingKey, setEditingKey] = useState<string | null>(null);
 
   pagesRef.current = pages;
+  openRef.current = open;
 
   /* --- Auswahllisten -------------------------------------------------- */
 
@@ -289,6 +294,14 @@ export function DocumentEditorSheet({
       }
     }
 
+    // Wurde das Blatt inzwischen geschlossen, die fertigen Seiten wieder
+    // wegwerfen — sonst tauchen sie beim nächsten Öffnen als Geister auf.
+    if (!openRef.current) {
+      for (const page of added) URL.revokeObjectURL(page.url);
+      setBusy(false);
+      return;
+    }
+
     setPages((current) => [...current, ...added]);
     setBusy(false);
 
@@ -356,6 +369,10 @@ export function DocumentEditorSheet({
     }
 
     setSaving(true);
+    // Neu geschriebene Anhänge merken: schlägt das Speichern des Dokuments
+    // danach fehl, werden sie wieder gelöscht — sonst bleiben verwaiste
+    // Blobs in der Datenbank zurück.
+    const written: ID[] = [];
     try {
       const pageIds: ID[] = [];
       for (const page of pages) {
@@ -367,6 +384,7 @@ export function DocumentEditorSheet({
           width: page.width,
           height: page.height,
         });
+        written.push(attachment.id);
         pageIds.push(attachment.id);
       }
 
@@ -392,19 +410,35 @@ export function DocumentEditorSheet({
       }
 
       // Ersetzte und entfernte Aufnahmen wegräumen — sonst wächst die
-      // Datenbank mit jeder Bearbeitung.
-      const stale = new Set(removedAttachments);
-      for (const page of pages) {
-        if (page.attachmentId && page.dirty) stale.add(page.attachmentId);
-      }
-      for (const id of stale) {
-        if (!pageIds.includes(id)) await remove(db.attachments, id);
+      // Datenbank mit jeder Bearbeitung. Das Dokument selbst ist zu diesem
+      // Zeitpunkt schon sicher gespeichert; scheitert nur das Aufräumen,
+      // bleiben verwaiste Anhänge zurück, die die Wartung später einsammelt
+      // (collectOrphanAttachments) — kein Grund, das Speichern als
+      // gescheitert zu melden.
+      try {
+        const stale = new Set(removedAttachments);
+        for (const page of pages) {
+          if (page.attachmentId && page.dirty) stale.add(page.attachmentId);
+        }
+        for (const id of stale) {
+          if (!pageIds.includes(id)) await remove(db.attachments, id);
+        }
+      } catch {
+        // Bewusst still: siehe Kommentar oben.
       }
 
       toast.success(documentId ? 'Dokument gespeichert.' : 'Dokument angelegt.');
       onSaved?.(savedId);
       onClose();
     } catch {
+      // Halb geschriebene Anhänge zurücknehmen, so gut es geht.
+      for (const id of written) {
+        try {
+          await remove(db.attachments, id);
+        } catch {
+          // Bleibt einer stehen, sammelt ihn die Wartung ein.
+        }
+      }
       toast.error('Speichern nicht möglich. Vielleicht ist der Gerätespeicher voll.');
     } finally {
       setSaving(false);
@@ -458,10 +492,12 @@ export function DocumentEditorSheet({
                         </span>
                       </button>
                       <div className="flex items-center justify-between">
+                        {/* min-h-11: auch die kleinen Knöpfe brauchen 44 px Höhe. */}
                         <IconButton
                           icon="chevron-left"
                           label={`Seite ${index + 1} nach vorn`}
                           size="sm"
+                          className="min-h-11"
                           disabled={index === 0}
                           onClick={() => movePage(index, -1)}
                         />
@@ -470,13 +506,14 @@ export function DocumentEditorSheet({
                           label={`Seite ${index + 1} entfernen`}
                           size="sm"
                           variant="ghost"
-                          className="text-alert"
+                          className="min-h-11 text-alert"
                           onClick={() => void removePage(index)}
                         />
                         <IconButton
                           icon="chevron-right"
                           label={`Seite ${index + 1} nach hinten`}
                           size="sm"
+                          className="min-h-11"
                           disabled={index === pages.length - 1}
                           onClick={() => movePage(index, 1)}
                         />
@@ -630,11 +667,23 @@ export function DocumentEditorSheet({
                     danger: true,
                   });
                   if (!ok) return;
-                  const doc = await db.documents.get(documentId);
-                  for (const id of doc?.pageIds ?? []) await remove(db.attachments, id);
-                  await remove(db.documents, documentId);
-                  toast.success('Dokument gelöscht.');
-                  onClose();
+                  try {
+                    // Erst den Eintrag löschen, dann die Anhänge: bricht es
+                    // mittendrin ab, bleiben höchstens verwaiste Anhänge
+                    // (die die Wartung einsammelt) — nie ein Dokument mit
+                    // toten Verweisen.
+                    const doc = await db.documents.get(documentId);
+                    await remove(db.documents, documentId);
+                    try {
+                      for (const id of doc?.pageIds ?? []) await remove(db.attachments, id);
+                    } catch {
+                      // Der Eintrag ist weg — übrige Anhänge holt die Wartung.
+                    }
+                    toast.success('Dokument gelöscht.');
+                    onClose();
+                  } catch {
+                    toast.error('Löschen nicht möglich. Bitte noch einmal versuchen.');
+                  }
                 }}
               />
             )}

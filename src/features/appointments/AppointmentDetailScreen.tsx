@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
   Badge,
@@ -43,9 +43,10 @@ import {
   appointmentTitle,
   isVisitorKind,
   linksForKind,
+  openReminderKeys,
 } from './reminders';
 import { useAppointmentFormData, useAppSettingsState } from './useCalendarData';
-import { resetReminders, NOTIFY_STATE_LABEL, useNotifyState } from './notify';
+import { markFired, resetReminders, NOTIFY_STATE_LABEL, useNotifyState } from './notify';
 import { NotifySheet } from './NotifySheet';
 import { FollowUpSheet } from './FollowUpSheet';
 
@@ -224,13 +225,26 @@ export function AppointmentDetailScreen() {
 
       if (isNew) {
         const created = await insert(db.appointments, fields);
+        // Wer den Termin gerade selbst angelegt hat, weiß von ihm: bereits
+        // offene Erinnerungs-Fenster gelten sofort als erledigt, sonst käme
+        // eine Minute später „Termin in 3 Stunden" aufs Sperrbild. Scheitert
+        // nur dieses Vermerken, ist der Termin trotzdem gespeichert — die
+        // überflüssige Mitteilung ist dann das kleinere Übel.
+        await markFired(openReminderKeys(created, nowISO())).catch(() => {});
         baseline.current = JSON.stringify(draft);
         toast.success('Termin angelegt.');
         navigate(`/kalender/${created.id}`, { replace: true });
       } else if (existing) {
         await patch(db.appointments, existing.id, fields);
-        // Verschobener Termin: die Erinnerungen sollen neu greifen dürfen.
-        if (existing.startAt !== draft.startAt) await resetReminders(existing.id);
+        // Verschobener Termin: die Erinnerungen sollen neu greifen dürfen —
+        // aber nicht sofort feuern, wenn das Fenster zum neuen Zeitpunkt
+        // längst offen ist (siehe oben beim Anlegen).
+        if (existing.startAt !== draft.startAt) {
+          await resetReminders(existing.id);
+          await markFired(
+            openReminderKeys({ id: existing.id, startAt: draft.startAt }, nowISO()),
+          ).catch(() => {});
+        }
         baseline.current = JSON.stringify(draft);
         toast.success('Gespeichert.');
       }

@@ -145,6 +145,15 @@ export async function insertPlain<T extends { id: ID }>(
   return record;
 }
 
+/** Aktualisiert Datensätze ohne Zeitstempel (BirthEvent, WeightEntry …). */
+export async function patchPlain<T extends { id: ID }>(
+  table: Table<T, ID>,
+  id: ID,
+  changes: Partial<Omit<T, 'id'>>,
+): Promise<void> {
+  await table.update(id, changes as never);
+}
+
 /* ------------------------------------------------------------------ */
 /*  Einstellungen                                                      */
 /* ------------------------------------------------------------------ */
@@ -184,7 +193,8 @@ export function clearSettingsCache(): void {
 }
 
 /** Ergänzt fehlende Zweige, damit ältere Datenstände nicht abstürzen. */
-function mergeSettings(stored: Settings): Settings {
+export function mergeSettings(stored?: Settings | null): Settings {
+  if (!stored) return DEFAULT_SETTINGS;
   return {
     ...DEFAULT_SETTINGS,
     ...stored,
@@ -241,6 +251,23 @@ export async function collectOrphanAttachments(): Promise<ID[]> {
   for (const c of cats) if (c.photoAttachmentId) used.add(c.photoAttachmentId);
   for (const k of kittens) if (k.photoAttachmentId) used.add(k.photoAttachmentId);
   return (all as ID[]).filter((id) => !used.has(id));
+}
+
+/**
+ * Löscht verwaiste Anhänge, die älter als eine Stunde sind. Die Altersgrenze
+ * schützt Anhänge, die ein gerade offenes Bearbeiten-Blatt schon angelegt,
+ * aber noch nicht mit seinem Datensatz verknüpft hat. Läuft beim App-Start.
+ */
+export async function cleanupOrphanAttachments(): Promise<number> {
+  const orphans = await collectOrphanAttachments();
+  if (orphans.length === 0) return 0;
+  const cutoff = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const records = await db.attachments.bulkGet(orphans);
+  const stale = records
+    .filter((a): a is Attachment => a !== undefined && a.createdAt < cutoff)
+    .map((a) => a.id);
+  if (stale.length > 0) await db.attachments.bulkDelete(stale);
+  return stale.length;
 }
 
 /* ------------------------------------------------------------------ */

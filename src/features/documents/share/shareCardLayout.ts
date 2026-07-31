@@ -5,8 +5,8 @@
  * in `renderShareCard.ts` benutzt ausschließlich das, was hier herauskommt.
  */
 
-import type { ISODate } from '../../../types';
-import { daysBetween } from '../../../lib/date';
+import type { ISODate, ISODateTime } from '../../../types';
+import { dateOf, daysBetween } from '../../../lib/date';
 
 /* ------------------------------------------------------------------ */
 /*  Texte                                                              */
@@ -45,6 +45,24 @@ export interface CurveSample {
   /** Reines Datum, „YYYY-MM-DD". */
   date: ISODate;
   grams: number;
+}
+
+/**
+ * Für ein Kunden-Update zählt pro Tag die zuletzt gemessene Zahl. Mehrfaches
+ * Kontrollwiegen am selben Tag darf die sichtbare Kurve nicht auf einen
+ * Mittelwert zurückziehen, der nie auf der Waage stand.
+ */
+export function latestDailySamples(
+  entries: { at: string; grams: number }[],
+): CurveSample[] {
+  const byDate = new Map<string, CurveSample>();
+  for (const entry of entries.slice().sort((a, b) => a.at.localeCompare(b.at))) {
+    if (!entry.at || !Number.isFinite(entry.grams) || entry.grams <= 0) continue;
+    const date = dateOf(entry.at as ISODateTime);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    byDate.set(date, { date, grams: entry.grams });
+  }
+  return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
 }
 
 export interface Box {

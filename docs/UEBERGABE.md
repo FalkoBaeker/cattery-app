@@ -3,8 +3,12 @@
 Dieses Dokument ist der vollständige Wissensstand des Projekts. Wer hier
 weiterarbeitet, soll **nichts raten müssen**.
 
-Stand: 31.07.2026 · 164 Dateien · 42.177 Zeilen · 1.020 Tests grün ·
-Typprüfung und Produktionsbau fehlerfrei.
+Ursprünglicher Stand: 31.07.2026. Dieses Dokument hält vor allem die
+Produktentscheidungen und den damaligen Entwicklungsverlauf fest. Die in
+**Teil 4 und 5** genannten offenen Punkte sind ein historischer
+Übergabestand und nicht mehr die aktuelle Abnahmeliste. Den verifizierten
+Release-Stand mit automatischen und manuellen Prüfungen dokumentiert
+[`PRUEFPROTOKOLL.md`](PRUEFPROTOKOLL.md).
 
 ---
 

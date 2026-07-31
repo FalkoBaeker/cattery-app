@@ -55,6 +55,28 @@ describe('DocumentViewer', () => {
 
     expect(await screen.findByText('Impfpass Mira')).toBeInTheDocument();
     expect(await screen.findByText('Seite 1 von 2')).toBeInTheDocument();
+    expect(
+      screen.getByRole('dialog', { name: 'Impfpass Mira' }),
+    ).toHaveAttribute('aria-modal', 'true');
+    expect(screen.getByRole('img', { name: 'Impfpass Mira, Seite 1 von 2' })).toBeInTheDocument();
+  });
+
+  it('bindet den Fokus modal und stellt ihn beim Schließen wieder her', async () => {
+    const previous = document.createElement('button');
+    previous.textContent = 'Hintergrund';
+    document.body.append(previous);
+    previous.focus();
+
+    const view = wrap(
+      <DocumentViewer pageIds={[]} title="Leerer Betrachter" onClose={() => {}} />,
+    );
+
+    const close = await screen.findByRole('button', { name: 'Betrachter schließen' });
+    await waitFor(() => expect(close).toHaveFocus());
+
+    view.unmount();
+    expect(previous).toHaveFocus();
+    previous.remove();
   });
 
   it('erklärt einen leeren Eintrag statt ihn nur weiß zu lassen', async () => {

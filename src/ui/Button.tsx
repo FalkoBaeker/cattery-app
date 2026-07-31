@@ -16,7 +16,7 @@ const VARIANTS: Record<Variant, string> = {
 
 const SIZES: Record<Size, string> = {
   // Mindestens 44 px hoch — Apples Vorgabe für sicher treffbare Ziele.
-  sm: 'min-h-9 px-3 text-[0.9rem] gap-1.5 rounded-lg',
+  sm: 'min-h-11 px-3 text-[0.9rem] gap-1.5 rounded-lg',
   md: 'min-h-11 px-4 text-[0.95rem] gap-2 rounded-xl',
   lg: 'min-h-13 px-5 text-base gap-2 rounded-xl',
 };
@@ -88,7 +88,7 @@ export function IconButton({
   type = 'button',
   ...rest
 }: IconButtonProps) {
-  const box = size === 'sm' ? 'size-9' : size === 'lg' ? 'size-12' : 'size-11';
+  const box = size === 'lg' ? 'size-12' : 'size-11';
   return (
     <button
       type={type}

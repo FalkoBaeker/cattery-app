@@ -12,6 +12,7 @@
 /* Bildschirm und Blätter */
 export { CatDetailScreen } from './CatDetailScreen';
 export { CatEditorSheet, type CatEditorSheetProps } from './CatEditorSheet';
+export { CatHasLittersError, deleteCatWithReferences } from './store';
 export { HeatSheet, type HeatSheetProps } from './HeatSheet';
 export { HealthTestSheet, type HealthTestSheetProps } from './HealthTestSheet';
 export { CatWeightSheet, type CatWeightSheetProps } from './CatWeightSheet';
@@ -39,7 +40,6 @@ export {
   DUE_SOON_DAYS,
   HEALTH_TEST_ICON,
   HEALTH_TEST_STATE_LABEL,
-  HEALTH_TEST_STATE_TONE,
   computeNextDueDate,
   healthTestGroupKey,
   healthTestStatus,

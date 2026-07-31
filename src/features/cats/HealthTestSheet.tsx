@@ -12,7 +12,7 @@ import {
   useConfirm,
   useToast,
 } from '../../ui';
-import { db, insert, patch } from '../../db/db';
+import { db, insert, patch, remove } from '../../db/db';
 import {
   HEALTH_TEST_DEFAULT_VALIDITY,
   HEALTH_TEST_LABEL,
@@ -161,7 +161,7 @@ export function HealthTestSheet({
     if (!ok) return;
     setBusy(true);
     try {
-      await db.healthTests.delete(testId);
+      await remove(db.healthTests, testId);
       toast.success('Test gelöscht.');
       onClose();
     } catch {

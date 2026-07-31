@@ -9,7 +9,7 @@
  */
 
 import type { CareTask, CareTaskKind, ID, ISODate, Kitten, Litter, SchedulePlan, Settings } from '../types';
-import { addWeeks, daysBetween, todayISO } from '../lib/date';
+import { addMonths, addWeeks, daysBetween, todayISO } from '../lib/date';
 import { db, insert, patch } from '../db/db';
 
 export interface PlannedTask {
@@ -215,12 +215,13 @@ export function checkLitterPause(
   limit: number,
   windowMonths: number,
 ): LitterPauseCheck {
-  const windowDays = Math.round(windowMonths * 30.44);
   // Alle Würfe, die zum geplanten Zeitpunkt noch im Fenster liegen.
   const inWindow = existingBirthDates
     .filter((d) => {
       const age = daysBetween(d, plannedDate);
-      return age >= 0 && age < windowDays;
+      // Monate sind Kalendermonate, keine durchschnittliche Anzahl Tage.
+      // Am exakten Monatsjubiläum fällt der frühere Wurf aus dem Fenster.
+      return age >= 0 && plannedDate < addMonths(d, windowMonths);
     })
     .sort();
 
@@ -243,7 +244,7 @@ export function checkLitterPause(
   // Sobald der älteste Wurf aus dem Fenster fällt, ist wieder Platz.
   const oldestRelevant = inWindow[inWindow.length - limit];
   const freeFrom = oldestRelevant
-    ? addDaysISO(oldestRelevant, windowDays)
+    ? addMonths(oldestRelevant, windowMonths)
     : undefined;
 
   return {
@@ -256,11 +257,4 @@ export function checkLitterPause(
       ? `Das wären ${countInWindow} Würfe in ${windowMonths} Monaten — erlaubt sind ${limit}. Wieder möglich ab ${freeFrom}.`
       : `Das wären ${countInWindow} Würfe in ${windowMonths} Monaten — erlaubt sind ${limit}.`,
   };
-}
-
-function addDaysISO(d: ISODate, days: number): ISODate {
-  const [y, m, day] = d.split('-').map(Number);
-  const x = new Date(y, m - 1, day + days);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${x.getFullYear()}-${pad(x.getMonth() + 1)}-${pad(x.getDate())}`;
 }

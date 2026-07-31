@@ -60,7 +60,8 @@ describe('WeightChart', () => {
       },
     ];
     const { container } = render(<WeightChart series={series} birthDate="2026-03-03" />);
-    expect(container.querySelectorAll('path')).toHaveLength(1);
+    // Farbige Linie plus heller Saum darunter.
+    expect(container.querySelectorAll('path')).toHaveLength(2);
   });
 
   it('bleibt mit neun Kitten lesbar und beschriftet die Legende', () => {
@@ -76,10 +77,34 @@ describe('WeightChart', () => {
     const { container } = render(
       <WeightChart series={series} focusKittenId="k4" birthDate="2026-03-03" />,
     );
-    // Neun Linien plus der helle Saum unter dem betrachteten Kitten.
-    expect(container.querySelectorAll('path')).toHaveLength(10);
+    // Neun Linien, jede mit hellem Saum darunter.
+    expect(container.querySelectorAll('path')).toHaveLength(18);
     expect(screen.getAllByRole('listitem')).toHaveLength(9);
     expect(screen.getByText('Alter in Tagen')).toBeInTheDocument();
+  });
+
+  it('zeichnet den hellen Saum auch auf der Wurfkurve ohne betrachtetes Kitten', () => {
+    // Helle Halsbandfarben wie Weiß (#d7dbdf) wären sonst im hellen Modus
+    // fast unsichtbar auf der Fläche.
+    const series: ChartSeriesInput[] = ['#d7dbdf', '#2f3438'].map((hex, i) => ({
+      kittenId: `k${i}`,
+      label: `Kitten ${i}`,
+      hex,
+      entries: [
+        { at: at(2026, 3, 3), grams: 90 + i },
+        { at: at(2026, 3, 5), grams: 120 + i },
+      ],
+    }));
+    const { container } = render(<WeightChart series={series} birthDate="2026-03-03" />);
+    // Je Reihe eine farbige Linie und ein Saum in Flächenfarbe.
+    expect(container.querySelectorAll('path')).toHaveLength(4);
+    expect(container.querySelectorAll('path.text-surface')).toHaveLength(2);
+    // Tagesmittel-Punkte tragen einen Rand in Flächenfarbe.
+    const nodes = [...container.querySelectorAll('circle')].filter((c) =>
+      c.classList.contains('text-surface'),
+    );
+    expect(nodes.length).toBeGreaterThan(0);
+    expect(nodes.every((c) => c.getAttribute('stroke') === 'currentColor')).toBe(true);
   });
 
   it('nennt die Achse ohne Geburtsdatum anders', () => {

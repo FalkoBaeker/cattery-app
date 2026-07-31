@@ -5,6 +5,7 @@ import {
   curveGeometry,
   formatDayCount,
   formatWeekHint,
+  latestDailySamples,
 } from './shareCardLayout';
 
 const BOX = { x: 0, y: 0, width: 100, height: 100 };
@@ -161,6 +162,31 @@ describe('curveGeometry', () => {
       expect(p.y).toBeGreaterThanOrEqual(40);
       expect(p.y).toBeLessThanOrEqual(100);
     }
+  });
+});
+
+describe('latestDailySamples', () => {
+  it('nimmt pro Tag die letzte echte Messung statt eines Tagesmittels', () => {
+    expect(
+      latestDailySamples([
+        { at: '2026-03-02T09:00:00.000Z', grams: 110 },
+        { at: '2026-03-01T18:00:00.000Z', grams: 105 },
+        { at: '2026-03-01T08:00:00.000Z', grams: 95 },
+      ]),
+    ).toEqual([
+      { date: '2026-03-01', grams: 105 },
+      { date: '2026-03-02', grams: 110 },
+    ]);
+  });
+
+  it('ignoriert unbrauchbare Werte', () => {
+    expect(
+      latestDailySamples([
+        { at: 'kein-datum', grams: 100 },
+        { at: '2026-03-01T08:00:00.000Z', grams: 0 },
+        { at: '2026-03-02T08:00:00.000Z', grams: 120 },
+      ]),
+    ).toEqual([{ date: '2026-03-02', grams: 120 }]);
   });
 });
 
