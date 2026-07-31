@@ -228,4 +228,23 @@ describe('Vertragsart wechseln', () => {
       { name: 'Nala', sex: 'female' },
     ]);
   });
+
+  it('ersetzt unmögliche Fristwerte durch wiederherstellbare Vorgaben', () => {
+    const data: ContractData = {
+      ...neuerEntwurf('breeding_reserved', EINSTELLUNGEN),
+      breedingUseMonths: 0,
+      breedingUseExtensionMonths: -1,
+      handoverDeadlineDays: -2,
+      matingAttempts: 0,
+      backPaymentDays: -3,
+    };
+
+    expect(vertragsregelnAnwenden(data)).toMatchObject({
+      breedingUseMonths: 18,
+      breedingUseExtensionMonths: 6,
+      handoverDeadlineDays: 3,
+      matingAttempts: 2,
+      backPaymentDays: 14,
+    });
+  });
 });

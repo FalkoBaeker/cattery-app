@@ -218,11 +218,35 @@ describe('Tagesfortschritt', () => {
     expect(p.total).toBe(3);
     expect(p.doneIds).toEqual(['a']);
     expect(p.measurements).toBe(2);
+    expect(p.targetPerKitten).toBe(1);
+    expect(p.requiredMeasurements).toBe(3);
+    expect(p.creditedMeasurements).toBe(1);
+  });
+
+  it('gilt bei zwei Tagesmessungen erst nach dem zweiten Wert als vollständig', () => {
+    const map = new Map<string, WeightSample[]>([
+      ['a', [sample(2026, 3, 3, 8, 92), sample(2026, 3, 3, 19, 96), sample(2026, 3, 3, 21, 97)]],
+      ['b', [sample(2026, 3, 3, 8, 90)]],
+    ]);
+    const p = dayProgress(['a', 'b'], map, '2026-03-03', 2);
+    expect(p.done).toBe(1);
+    expect(p.doneIds).toEqual(['a']);
+    expect(p.measurements).toBe(4);
+    expect(p.requiredMeasurements).toBe(4);
+    expect(p.creditedMeasurements).toBe(3);
   });
 
   it('ist bei leerem Wurf nicht kaputt', () => {
     const p = dayProgress([], new Map(), '2026-03-03');
-    expect(p).toEqual({ done: 0, total: 0, doneIds: [], measurements: 0 });
+    expect(p).toEqual({
+      done: 0,
+      total: 0,
+      doneIds: [],
+      measurements: 0,
+      targetPerKitten: 1,
+      requiredMeasurements: 0,
+      creditedMeasurements: 0,
+    });
   });
 });
 

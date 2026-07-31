@@ -12,6 +12,7 @@ import {
   formatDuration,
   weighingStatus,
   groupTasksByWeek,
+  isWeighingPhase,
   isLivingKitten,
   nextOpenTask,
   pregnancyInfo,
@@ -233,6 +234,33 @@ describe('summarizeLitter', () => {
     expect(weighingLine(s)).toBe('Heute alle gewogen');
   });
 
+  it('meldet in den ersten zwei Wochen erst zwei Messungen je Kitten als Tagesziel', () => {
+    const kittens = [k('a'), k('b')];
+    const firstRound = [
+      { kittenId: 'a', at: at(2026, 3, 10, 7) },
+      { kittenId: 'b', at: at(2026, 3, 10, 8) },
+    ];
+    const halfway = summarizeLitter(kittens, firstRound, '2026-03-10', '2026-03-01');
+    expect(halfway.dailyTarget).toBe(2);
+    expect(halfway.weighedToday).toBe(0);
+    expect(halfway.allWeighedToday).toBe(false);
+    expect(weighingLine(halfway)).toBe('2 von 4 Messungen heute');
+
+    const complete = summarizeLitter(
+      kittens,
+      [
+        ...firstRound,
+        { kittenId: 'a', at: at(2026, 3, 10, 19) },
+        { kittenId: 'b', at: at(2026, 3, 10, 20) },
+      ],
+      '2026-03-10',
+      '2026-03-01',
+    );
+    expect(complete.weighedToday).toBe(2);
+    expect(complete.allWeighedToday).toBe(true);
+    expect(weighingLine(complete)).toBe('Tagesziel erreicht (2× je Kitten)');
+  });
+
   it('erkennt einen Wurf, in dem nur noch tote Kitten stehen', () => {
     const s = summarizeLitter([k('a', { stillborn: true, saleStatus: 'deceased' })], [], '2026-03-01');
     expect(s.alive).toBe(0);
@@ -269,6 +297,11 @@ describe('weighingStatus', () => {
     const status = weighingStatus(s, '2026-01-27', ref);
     expect(status?.tone).toBe('neutral');
     expect(status?.text).toBe('Ab Woche 5 kein Routinewiegen mehr');
+  });
+
+  it('endet die Routine an Tag 28 und nicht erst an Tag 35', () => {
+    expect(isWeighingPhase('2026-03-01', '2026-03-28')).toBe(true);
+    expect(isWeighingPhase('2026-03-01', '2026-03-29')).toBe(false);
   });
 
   it('schweigt ohne Kitten oder ohne Geburtsdatum', () => {

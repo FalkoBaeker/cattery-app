@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeWeights, dailyAverages, gainPerDay, litterAverageWeight } from './weight';
+import {
+  analyzeWeights,
+  dailyAverages,
+  dailyWeightMeasurementTarget,
+  gainPerDay,
+  litterAverageWeight,
+} from './weight';
 import { DEFAULT_SETTINGS } from '../types';
 
 const T = DEFAULT_SETTINGS.weight; // gut ab 7, beobachten ab 6, Sorgenkind unter 80 g
@@ -10,6 +16,20 @@ function w(dayOffset: number, grams: number, hour = 8) {
   d.setDate(d.getDate() + dayOffset);
   return { at: d.toISOString(), grams };
 }
+
+describe('dailyWeightMeasurementTarget', () => {
+  it('verlangt in den ersten zwei Lebenswochen zwei Messungen', () => {
+    expect(dailyWeightMeasurementTarget(0)).toBe(2);
+    expect(dailyWeightMeasurementTarget(13)).toBe(2);
+  });
+
+  it('fällt ab Tag 14 und bei unbekanntem Alter auf eine Messung zurück', () => {
+    expect(dailyWeightMeasurementTarget(14)).toBe(1);
+    expect(dailyWeightMeasurementTarget(28)).toBe(1);
+    expect(dailyWeightMeasurementTarget()).toBe(1);
+    expect(dailyWeightMeasurementTarget(-1)).toBe(1);
+  });
+});
 
 describe('gainPerDay', () => {
   it('braucht mindestens zwei Messungen', () => {

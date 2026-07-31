@@ -32,6 +32,7 @@ import {
 } from '../../ui';
 import {
   dateOf,
+  daysBetween,
   formatDateTime,
   formatRelativeDay,
   formatTime,
@@ -40,7 +41,11 @@ import {
   toLocalInputValue,
 } from '../../lib/date';
 import { formatGainG, formatGainPerDay, formatGrams, formatPercent } from '../../lib/format';
-import { WEIGHT_LEVEL_TONE, type WeightLevel } from '../../domain/weight';
+import {
+  dailyWeightMeasurementTarget,
+  WEIGHT_LEVEL_TONE,
+  type WeightLevel,
+} from '../../domain/weight';
 import {
   analyzeKitten,
   dayOfLifeLabel,
@@ -178,7 +183,15 @@ export function WeighScreen() {
     );
 
     const order = alive.map((k) => k.id);
-    const progress = dayProgress(order, samplesByKitten, refDate);
+    const ageDays = data.litter.birthDate
+      ? daysBetween(data.litter.birthDate, refDate)
+      : undefined;
+    const progress = dayProgress(
+      order,
+      samplesByKitten,
+      refDate,
+      dailyWeightMeasurementTarget(ageDays),
+    );
 
     const series = alive.map((k) => ({
       kittenId: k.id,
@@ -232,7 +245,7 @@ export function WeighScreen() {
       const delta = deltaToPrevious(before, at, grams);
       const parts = [`${kittenLabel(kitten)}: ${formatGrams(grams)}`];
       if (delta) parts.push(formatGainG(delta.grams));
-      if (allDone) parts.push('alle erfasst');
+      if (allDone) parts.push('Durchgang vollständig');
 
       toast.show(parts.join(' · '), {
         tone: 'ok',
@@ -339,6 +352,16 @@ export function WeighScreen() {
   const editEntry = editEntryId
     ? (view.weights.find((w) => w.id === editEntryId) ?? null)
     : null;
+  const hasMultipleDailyMeasurements = progress.targetPerKitten > 1;
+  const progressValue = hasMultipleDailyMeasurements
+    ? progress.creditedMeasurements
+    : progress.done;
+  const progressMax = hasMultipleDailyMeasurements
+    ? progress.requiredMeasurements
+    : progress.total;
+  const progressLabel = hasMultipleDailyMeasurements
+    ? `Wiege-Fortschritt: ${progress.creditedMeasurements} von ${progress.requiredMeasurements} Messungen`
+    : `Wiege-Fortschritt: ${progress.done} von ${progress.total} gewogen`;
 
   /* --- Bildschirm ohne Kitten -------------------------------------- */
 
@@ -388,13 +411,17 @@ export function WeighScreen() {
                 {dayOfLifeLabel(birthDate, refDate)}
               </p>
               <p className="text-[1.05rem] font-semibold text-text">
-                {progress.done} von {progress.total} gewogen
+                {hasMultipleDailyMeasurements
+                  ? `${progress.creditedMeasurements} von ${progress.requiredMeasurements} Messungen`
+                  : `${progress.done} von ${progress.total} gewogen`}
               </p>
             </div>
             <Badge tone={progress.done >= progress.total ? 'ok' : 'neutral'}>
-              {progress.measurements === 1
-                ? '1 Messung'
-                : `${progress.measurements} Messungen`}
+              {hasMultipleDailyMeasurements
+                ? `${progress.done} von ${progress.total} vollständig`
+                : progress.measurements === 1
+                  ? '1 Messung'
+                  : `${progress.measurements} Messungen`}
             </Badge>
           </div>
 
@@ -402,13 +429,13 @@ export function WeighScreen() {
             className="mt-3 h-2 w-full overflow-hidden rounded-full bg-surface-2"
             role="progressbar"
             aria-valuemin={0}
-            aria-valuemax={progress.total}
-            aria-valuenow={progress.done}
-            aria-label={`Wiege-Fortschritt: ${progress.done} von ${progress.total} gewogen`}
+            aria-valuemax={progressMax}
+            aria-valuenow={progressValue}
+            aria-label={progressLabel}
           >
             <div
               className="h-full rounded-full bg-ok transition-[width] duration-300"
-              style={{ width: `${progress.total ? (progress.done / progress.total) * 100 : 0}%` }}
+              style={{ width: `${progressMax ? (progressValue / progressMax) * 100 : 0}%` }}
             />
           </div>
 

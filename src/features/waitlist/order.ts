@@ -206,6 +206,8 @@ export function fillTemplate(template: string, name: string): string {
 /*  Sammelnachricht                                                    */
 /* ================================================================== */
 
+export const BROADCAST_KEY = 'waitlist:broadcast';
+
 export interface BroadcastRecipient {
   interestId: ID;
   /** Name zum Zeitpunkt des Starts — die Liste bleibt lesbar, auch wenn
@@ -226,6 +228,62 @@ export interface BroadcastRun {
   /** Der einmal verfasste Text, noch mit {name} als Platzhalter. */
   text: string;
   recipients: BroadcastRecipient[];
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isDateTime(value: unknown): value is ISODateTime {
+  return (
+    typeof value === 'string' &&
+    value.includes('T') &&
+    Number.isFinite(Date.parse(value))
+  );
+}
+
+function hasOnlyKeys(value: Record<string, unknown>, allowed: readonly string[]): boolean {
+  const keys = new Set(allowed);
+  return Object.keys(value).every((key) => keys.has(key));
+}
+
+/** Laufzeitprüfung für Daten aus IndexedDB und Sicherungsdateien. */
+export function isBroadcastRun(value: unknown): value is BroadcastRun {
+  if (!isPlainRecord(value)) return false;
+  if (!hasOnlyKeys(value, ['startedAt', 'text', 'recipients'])) return false;
+  if (!isDateTime(value.startedAt) || typeof value.text !== 'string') return false;
+  if (!Array.isArray(value.recipients)) return false;
+
+  const ids = new Set<string>();
+  for (const recipient of value.recipients) {
+    if (!isPlainRecord(recipient)) return false;
+    if (
+      !hasOnlyKeys(recipient, [
+        'interestId',
+        'name',
+        'phone',
+        'sentAt',
+        'skippedAt',
+      ])
+    ) {
+      return false;
+    }
+    if (
+      typeof recipient.interestId !== 'string' ||
+      recipient.interestId.trim() === '' ||
+      typeof recipient.name !== 'string' ||
+      (recipient.phone !== undefined && typeof recipient.phone !== 'string') ||
+      (recipient.sentAt !== undefined && !isDateTime(recipient.sentAt)) ||
+      (recipient.skippedAt !== undefined && !isDateTime(recipient.skippedAt)) ||
+      (recipient.sentAt !== undefined && recipient.skippedAt !== undefined)
+    ) {
+      return false;
+    }
+    if (ids.has(recipient.interestId)) return false;
+    ids.add(recipient.interestId);
+  }
+
+  return true;
 }
 
 export interface BroadcastProgress {

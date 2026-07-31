@@ -20,15 +20,17 @@ Ausgeführt im Projektverzeichnis mit Node.js 24:
 ```text
 npm run lint       erfolgreich, keine Meldungen
 npm run typecheck  erfolgreich
-npm test           59 Testdateien, 1.123 Tests erfolgreich
+npm test           60 Testdateien, 1.137 Tests erfolgreich
 npm run build      erfolgreich
 npm audit          0 bekannte Schwachstellen
 git diff --check   keine Whitespace-Fehler
 ```
 
-Der vollständige Testlauf wurde fünfmal hintereinander wiederholt. Alle fünf
-Läufe blieben grün; im Testprotokoll erschienen weder React-`act`-Warnungen
-noch Meldungen zu unbekannten DOM-Eigenschaften.
+Vor der letzten unabhängigen Gegenprüfung wurde der damalige vollständige
+Testlauf fünfmal hintereinander wiederholt. Nach der Behebung der letzten
+Prüfbefunde liefen zusätzlich 314 gezielte Regressionstests und der aktuelle
+vollständige Lauf mit 1.137 Tests erfolgreich. Im Testprotokoll erschienen
+weder React-`act`-Warnungen noch Meldungen zu unbekannten DOM-Eigenschaften.
 
 `npm run check` führt Linting, Typprüfung, Tests und den Produktionsbau in
 derselben Reihenfolge aus. Der GitHub-Pages-Workflow verwendet genau diesen
@@ -41,8 +43,8 @@ und Kitten sowie Lösch- und Wiederherstellungsfälle ab.
 
 ## Browser-Abnahme
 
-Die folgenden Abläufe wurden mit einer mobilen Ansichtsgröße von 393 × 852
-Pixeln und einem realistischen Sicherungsdatensatz geprüft:
+Die folgenden Abläufe wurden mit mobilen Ansichtsgrößen von 393 × 852 und
+390 × 844 Pixeln sowie einem realistischen Sicherungsdatensatz geprüft:
 
 - Erststart, Installationshinweis und Einrichtungsführung
 - Wiederherstellung einer vollständigen Sicherung einschließlich Bildanhang
@@ -50,6 +52,8 @@ Pixeln und einem realistischen Sicherungsdatensatz geprüft:
 - Dashboard, Zuchttiere, Würfe, Wurfdetails, Fahrplan und Geburtsprotokoll
 - Wiege-Modus mit zwei Durchgängen, automatischer Fokuskette,
   Gewichtshistorie und Kurve
+- ein elf Tage alter Wurf nach nur einem Wiegedurchgang: Wurfkarte
+  „2 von 4 Messungen“, Wiegeansicht „0 von 2 vollständig“
 - Kitten- und Katzenprofile einschließlich Zeitstrahl
 - Warteliste, Kontaktnotiz, manuelle Reihenfolge, Kitten-Zuordnung und
   Vorschau einer WhatsApp-Sammelnachricht als Einzelnachrichten
@@ -64,6 +68,8 @@ Pixeln und einem realistischen Sicherungsdatensatz geprüft:
 - WCAG-konforme Textkontraste der semantischen Farbpalette
 - segmentierte Auswahlfelder mit 44-Pixel-Touchzielen und
   Radiogruppen-Pfeiltastennavigation
+- gestapelter Löschdialog über einem bearbeiteten Wurf: Einmal Escape schließt
+  nur die Bestätigung und erhält den ungespeicherten Entwurf
 - Module aus- und wieder einschalten, ohne Datenverlust
 - ausgeblendete Haupttabs und das Abweisen alter Direktlinks zu
   ausgeschalteten Bereichen
@@ -95,7 +101,7 @@ Webserver vollständig beendet.
   Sperre verhindert Reload-Schleifen.
 - Die dabei geprüften Browserprotokolle enthielten keine Warnungen oder
   Fehler.
-- Der Service Worker lädt 50 Produktionsdateien mit insgesamt rund 1,7 MB
+- Der Service Worker lädt 51 Produktionsdateien mit insgesamt rund 1,7 MB
   vor; die fachlichen Bild- und PDF-Anhänge bleiben in IndexedDB.
 
 Damit sind App-Hülle, lazy geladene Fachmodule und statische PWA-Ressourcen
@@ -123,6 +129,9 @@ Besonders geprüft wurden folgende Fehlerfälle:
   gelöscht wird.
 - Vertrag B akzeptiert höchstens zwei Tiere und ausschließlich weibliche
   Katzen.
+- Unbrauchbare Null- oder Negativwerte in den Fristen von Vertrag B werden
+  vor Vertrag, PDF und Zuchtnutzungsvorgang auf gültige Vorgaben normalisiert,
+  sodass eine von der App erzeugte Sicherung wiederherstellbar bleibt.
 - Die Vertragsart eines bereits gespeicherten Vertrags kann nicht nachträglich
   so geändert werden, dass der zugehörige Vorgang verloren geht.
 - Wird ein Vertrag nach der PDF-Erzeugung inhaltlich verändert, entfernt die
@@ -134,6 +143,9 @@ Besonders geprüft wurden folgende Fehlerfälle:
   Kennungen, doppelte Primärschlüssel, Aufzählungswerte und Verweise zwischen
   Tabellen geprüft. Alte vollständige Sicherungen der Version 1 bleiben
   lesbar.
+- Der gespeicherte Fortschritt einer WhatsApp-Sammelnachricht wird bis auf
+  jeden Empfänger geprüft. Beschädigte Laufzeitdaten werden weder importiert
+  noch an die Wartelistenoberfläche weitergereicht.
 - Sämtliche Anhänge werden vor jeder Datenänderung dekodiert und geprüft.
   Erst danach ersetzt eine einzige Transaktion den bisherigen Datenbestand;
   ein Fehler rollt vollständig zurück.
@@ -145,19 +157,23 @@ Besonders geprüft wurden folgende Fehlerfälle:
 - Ein unmittelbarer Gewichtsverlust oder Stillstand bleibt auch bei positiver
   geglätteter Mehrtagesrate kritisch. In den ersten beiden Lebenswochen gilt
   die Tageswiegung erst nach zwei Messungen als erledigt.
+- Das Routinewiegen endet exakt an Lebenstag 28, also mit Beginn der fünften
+  Woche, in Dashboard, Wurfkarte, Wurfdetail und Wiegeansicht einheitlich.
 - Das Verbandsfenster für Würfe verwendet echte Kalendermonate. Ein Wurf fällt
   am exakten 24-Monats-Jubiläum aus dem Betrachtungsfenster; Monatsenden und
   Schaltjahre werden kalendergenau behandelt.
 
 ## Unabhängige Gegenprüfung
 
-Zwei getrennte Prüfagenten erhielten absichtlich keinen Entwicklungskontext
+Drei getrennte Prüfagenten erhielten absichtlich keinen Entwicklungskontext
 und untersuchten Repository, Teststand und gebaute App wie ein fremdes
 Release-Team. Ihre No-Go-Funde zur Sicherungsvalidierung, zu veralteten
 Vertrags-PDFs, Gewichtslogik und Wiegerhythmus, Löschreferenzen,
 Kalendermonaten, Modulschaltern sowie Tastatur- und Kontrastzugänglichkeit
-wurden behoben und mit eigenen Regressionstests sowie einer erneuten
-Produktionsabnahme abgesichert.
+wurden behoben. Die letzte Gegenprüfung fand zusätzlich einen beschädigten
+Sammelnachrichten-Datensatz, eine Null-Monatsfrist und das doppelte Schließen
+gestapelter Dialoge per Escape; auch diese Fälle sind mit eigenen
+Regressionstests und einer erneuten Produktionsabnahme abgesichert.
 
 ## Repository- und Datenschutzprüfung
 

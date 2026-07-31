@@ -15,10 +15,10 @@ import {
   VORGABE_NUTZUNGSMONATE,
   VORGABE_VERLAENGERUNGSMONATE,
 } from './calc';
-import { tierNamen } from './helpers';
+import { tierNamen, vertragsregelnAnwenden } from './helpers';
 
-function vorgangsName(contract: Contract): string {
-  const name = tierNamen(contract.data);
+function vorgangsName(data: Contract['data']): string {
+  const name = tierNamen(data);
   return name === 'ohne Tier' ? 'Katze' : name;
 }
 
@@ -88,23 +88,24 @@ export async function vorgangAnlegen(contract: Contract): Promise<BreedingUse | 
   const vorhanden = await vorgangZuVertrag(contract.id);
   if (vorhanden) return vorhanden;
 
-  const tier = contract.data.animals[0];
-  const startDate = contract.data.breedingUseStartDate ?? todayISO();
-  const months = contract.data.breedingUseMonths ?? VORGABE_NUTZUNGSMONATE;
+  const data = vertragsregelnAnwenden(contract.data);
+  const tier = data.animals[0];
+  const startDate = data.breedingUseStartDate ?? todayISO();
+  const months = data.breedingUseMonths ?? VORGABE_NUTZUNGSMONATE;
   const extensionMonths =
-    contract.data.breedingUseExtensionMonths ?? VORGABE_VERLAENGERUNGSMONATE;
+    data.breedingUseExtensionMonths ?? VORGABE_VERLAENGERUNGSMONATE;
 
   return insert(db.breedingUses, {
     contractId: contract.id,
     catId: tier?.catId,
     kittenId: tier?.kittenId,
-    catName: vorgangsName(contract),
+    catName: vorgangsName(data),
     startDate,
     months,
     extensionMonths,
     deadlineDate: fristende(startDate, months),
-    discountCents: contract.data.discountCents,
-    backPaymentDays: contract.data.backPaymentDays,
+    discountCents: data.discountCents,
+    backPaymentDays: data.backPaymentDays,
     stage: 'at_buyer',
     history: [{ stage: 'at_buyer', at: nowISO(), note: 'Vorgang aus dem Vertrag angelegt' }],
   });
@@ -120,21 +121,22 @@ export async function vorgangAusVertragAktualisieren(contract: Contract): Promis
   if (!vorgang) return;
   if (vorgang.stage !== 'at_buyer' || vorgang.extendedAt) return;
 
-  const tier = contract.data.animals[0];
-  const startDate = contract.data.breedingUseStartDate ?? vorgang.startDate;
-  const months = contract.data.breedingUseMonths ?? vorgang.months;
-  const extensionMonths = contract.data.breedingUseExtensionMonths ?? vorgang.extensionMonths;
+  const data = vertragsregelnAnwenden(contract.data);
+  const tier = data.animals[0];
+  const startDate = data.breedingUseStartDate ?? vorgang.startDate;
+  const months = data.breedingUseMonths ?? vorgang.months;
+  const extensionMonths = data.breedingUseExtensionMonths ?? vorgang.extensionMonths;
 
   await patch(db.breedingUses, vorgang.id, {
     catId: tier?.catId,
     kittenId: tier?.kittenId,
-    catName: vorgangsName(contract),
+    catName: vorgangsName(data),
     startDate,
     months,
     extensionMonths,
     deadlineDate: fristende(startDate, months),
-    discountCents: contract.data.discountCents,
-    backPaymentDays: contract.data.backPaymentDays,
+    discountCents: data.discountCents,
+    backPaymentDays: data.backPaymentDays,
   });
 }
 

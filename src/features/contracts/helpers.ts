@@ -62,10 +62,42 @@ export interface EntwurfQuellen {
  * sondern aus diesem Vertragsentwurf entfernt.
  */
 export function vertragsregelnAnwenden(data: ContractData): ContractData {
-  if (data.type !== 'breeding_reserved') return data;
-  const animals = data.animals.filter((animal) => animal.sex !== 'male').slice(0, 2);
-  return {
+  const positive = (value: number | undefined, fallback: number) =>
+    Number.isSafeInteger(value) && (value as number) > 0 ? (value as number) : fallback;
+  const nonNegative = (value: number | undefined, fallback: number) =>
+    Number.isSafeInteger(value) && (value as number) >= 0 ? (value as number) : fallback;
+
+  const normalized: ContractData = {
     ...data,
+    breedingUseMonths:
+      data.breedingUseMonths === undefined && data.type !== 'breeding_reserved'
+        ? undefined
+        : positive(data.breedingUseMonths, VORGABE_NUTZUNGSMONATE),
+    breedingUseExtensionMonths:
+      data.breedingUseExtensionMonths === undefined && data.type !== 'breeding_reserved'
+        ? undefined
+        : nonNegative(
+            data.breedingUseExtensionMonths,
+            VORGABE_VERLAENGERUNGSMONATE,
+          ),
+    handoverDeadlineDays:
+      data.handoverDeadlineDays === undefined && data.type !== 'breeding_reserved'
+        ? undefined
+        : nonNegative(data.handoverDeadlineDays, VORGABE_HERAUSGABETAGE),
+    matingAttempts:
+      data.matingAttempts === undefined && data.type !== 'breeding_reserved'
+        ? undefined
+        : positive(data.matingAttempts, VORGABE_DECKVERSUCHE),
+    backPaymentDays:
+      data.backPaymentDays === undefined && data.type !== 'breeding_reserved'
+        ? undefined
+        : nonNegative(data.backPaymentDays, VORGABE_NACHZAHLUNGSTAGE),
+  };
+
+  if (normalized.type !== 'breeding_reserved') return normalized;
+  const animals = normalized.animals.filter((animal) => animal.sex !== 'male').slice(0, 2);
+  return {
+    ...normalized,
     animals: animals.length > 0 ? animals : [{ name: '', sex: 'female' }],
   };
 }

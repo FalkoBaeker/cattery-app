@@ -20,7 +20,7 @@ import {
 } from '../../ui';
 import type { Cat, ID, Litter } from '../../types';
 import { db } from '../../db/db';
-import { formatDate } from '../../lib/date';
+import { formatDate, todayISO } from '../../lib/date';
 import { CatEditorSheet, CatRow } from '../cats';
 import {
   analyzeLitterWeights,
@@ -88,7 +88,7 @@ export function ZuchtScreen() {
         );
         return {
           litter,
-          summary: summarizeLitter(kittens, weights),
+          summary: summarizeLitter(kittens, weights, todayISO(), litter.birthDate),
           warnings: countWeightWarnings(analyses),
           nextTask: nextOpenTask(data.tasks.filter((t) => t.litterId === litter.id)),
         };

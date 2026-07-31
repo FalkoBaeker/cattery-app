@@ -121,6 +121,22 @@ describe('Vertragseditor', () => {
     expect(vorgang.extensionMonths).toBe(6);
   });
 
+  it('speichert keine unbrauchbare Nutzungsfrist von null Monaten', async () => {
+    const nutzer = userEvent.setup();
+    zeichne('/mehr/vertraege/neu?art=zuchtnutzung');
+
+    const months = await screen.findByLabelText('Nutzungsfrist');
+    await nutzer.clear(months);
+    await nutzer.type(months, '0');
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Vertrag speichern/ }));
+      await vi.waitFor(async () => expect(await db.breedingUses.count()).toBe(1));
+    });
+
+    expect((await db.contracts.toArray())[0].data.breedingUseMonths).toBe(18);
+    expect((await db.breedingUses.toArray())[0].months).toBe(18);
+  });
+
   it('zeigt beim Zuchtnutzungsvertrag die Fristfelder statt der Übergabe', async () => {
     zeichne('/mehr/vertraege/neu?art=zuchtnutzung');
     expect(await screen.findByText('Fristen')).toBeInTheDocument();

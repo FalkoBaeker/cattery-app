@@ -21,9 +21,14 @@ import type {
   WeightThresholds,
 } from '../../types';
 import { COLLAR_COLORS } from '../../types';
-import { addDays, ageInWeeks, dateOf, daysBetween, todayISO } from '../../lib/date';
+import { addDays, dateOf, daysBetween, todayISO } from '../../lib/date';
 import { plural } from '../../lib/format';
-import { analyzeWeights, litterAverageWeight, type WeightAnalysis } from '../../domain/weight';
+import {
+  analyzeWeights,
+  dailyWeightMeasurementTarget,
+  litterAverageWeight,
+  type WeightAnalysis,
+} from '../../domain/weight';
 
 /* ------------------------------------------------------------------ */
 /*  Geburtstermin und Trächtigkeit                                     */
@@ -136,10 +141,18 @@ export interface LitterSummary {
   /** Verkauft, einschließlich Zuchtvorbehalt. */
   sold: number;
   kept: number;
-  /** Lebende Kitten, die heute mindestens einmal gewogen wurden. */
+  /** Lebende Kitten, die ihr heutiges Messziel vollständig erreicht haben. */
   weighedToday: number;
   /** Lebende Kitten insgesamt — die Bezugsgröße fürs Wiegen. */
   toWeigh: number;
+  /** Messziel je Kitten: in Woche 1–2 zwei, danach eine Messung. */
+  dailyTarget: number;
+  /** Alle tatsächlich gespeicherten Messungen am Bezugstag. */
+  measurementsToday: number;
+  /** Erfüllte Sollmessungen; Mehrfachmessungen über dem Ziel zählen nicht weiter. */
+  creditedMeasurementsToday: number;
+  /** Messziel über alle lebenden Kitten. */
+  requiredMeasurementsToday: number;
   allWeighedToday: boolean;
   /** Noch kein Kitten erfasst. */
   isEmpty: boolean;
@@ -158,16 +171,32 @@ export function summarizeLitter(
   kittens: KittenLike[],
   weights: Pick<WeightEntry, 'kittenId' | 'at'>[] = [],
   ref: ISODate = todayISO(),
+  birthDate?: ISODate | null,
 ): LitterSummary {
   const alive = kittens.filter(isLivingKitten);
   const aliveIds = new Set(alive.map((k) => k.id));
+  const dailyTarget = dailyWeightMeasurementTarget(
+    birthDate ? daysBetween(birthDate, ref) : undefined,
+  );
 
-  const weighedIds = new Set<ID>();
+  const measurementsByKitten = new Map<ID, number>();
   for (const w of weights) {
     if (!aliveIds.has(w.kittenId)) continue;
     if (!w.at) continue;
-    if (dateOf(w.at) === ref) weighedIds.add(w.kittenId);
+    if (dateOf(w.at) !== ref) continue;
+    measurementsByKitten.set(w.kittenId, (measurementsByKitten.get(w.kittenId) ?? 0) + 1);
   }
+  const measurementsToday = [...measurementsByKitten.values()].reduce(
+    (sum, count) => sum + count,
+    0,
+  );
+  const creditedMeasurementsToday = alive.reduce(
+    (sum, kitten) => sum + Math.min(measurementsByKitten.get(kitten.id) ?? 0, dailyTarget),
+    0,
+  );
+  const weighedToday = alive.filter(
+    (kitten) => (measurementsByKitten.get(kitten.id) ?? 0) >= dailyTarget,
+  ).length;
 
   const countStatus = (s: KittenSaleStatus) =>
     alive.filter((k) => k.saleStatus === s).length;
@@ -185,9 +214,13 @@ export function summarizeLitter(
     reserved: countStatus('reserved'),
     sold: countStatus('sold') + countStatus('sold_breeding_reserved'),
     kept: countStatus('kept'),
-    weighedToday: weighedIds.size,
+    weighedToday,
     toWeigh: alive.length,
-    allWeighedToday: alive.length > 0 && weighedIds.size === alive.length,
+    dailyTarget,
+    measurementsToday,
+    creditedMeasurementsToday,
+    requiredMeasurementsToday: alive.length * dailyTarget,
+    allWeighedToday: alive.length > 0 && weighedToday === alive.length,
     isEmpty: kittens.length === 0,
   };
 }
@@ -211,6 +244,13 @@ export function summaryLine(s: LitterSummary): string {
 /** „4 von 5 heute gewogen" — oder ein passender Kurztext. */
 export function weighingLine(s: LitterSummary): string {
   if (s.toWeigh === 0) return 'Nichts zu wiegen';
+  if (s.dailyTarget > 1) {
+    if (s.creditedMeasurementsToday === 0) {
+      return `Heute noch nicht gewogen (${s.requiredMeasurementsToday} Messungen)`;
+    }
+    if (s.allWeighedToday) return 'Tagesziel erreicht (2× je Kitten)';
+    return `${s.creditedMeasurementsToday} von ${s.requiredMeasurementsToday} Messungen heute`;
+  }
   if (s.weighedToday === 0) return `Heute noch nicht gewogen (${s.toWeigh})`;
   if (s.allWeighedToday) return 'Heute alle gewogen';
   return `${s.weighedToday} von ${s.toWeigh} heute gewogen`;
@@ -222,7 +262,8 @@ export const WEIGHING_END_WEEK = 5;
 /** Wird in diesem Wurf noch routinemäßig gewogen? Ohne Geburtsdatum: nein. */
 export function isWeighingPhase(birthDate?: ISODate | null, ref: ISODate = todayISO()): boolean {
   if (!birthDate) return false;
-  return ageInWeeks(birthDate, ref) < WEIGHING_END_WEEK;
+  const ageDays = daysBetween(birthDate, ref);
+  return ageDays >= 0 && ageDays < 28;
 }
 
 export interface WeighingStatus {

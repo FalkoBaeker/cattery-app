@@ -523,6 +523,64 @@ describe('parseBackup — beschädigte und fremde Dateien', () => {
     expect(duplicate.error).toContain('doppelt');
   });
 
+  it('lehnt einen beschädigten Fortschritt der Sammelnachricht ab', () => {
+    const result = parseBackup(
+      JSON.stringify(
+        completeBackup({
+          tables: {
+            ...emptyBackupTables(),
+            notificationLog: [
+              {
+                key: 'waitlist:broadcast',
+                firedAt: '2026-07-31T12:00:00.000Z',
+                run: {
+                  startedAt: '2026-07-31T12:00:00.000Z',
+                  text: 'Hallo {name}',
+                  recipients: [null],
+                },
+              },
+            ],
+          },
+        }),
+      ),
+    );
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toContain('Erinnerungs-Protokoll');
+  });
+
+  it('akzeptiert einen vollständig geprüften Versandfortschritt', () => {
+    const result = parseBackup(
+      JSON.stringify(
+        completeBackup({
+          tables: {
+            ...emptyBackupTables(),
+            notificationLog: [
+              {
+                key: 'waitlist:broadcast',
+                firedAt: '2026-07-31T12:00:00.000Z',
+                run: {
+                  startedAt: '2026-07-31T12:00:00.000Z',
+                  text: 'Hallo {name}',
+                  recipients: [
+                    {
+                      interestId: 'anna',
+                      name: 'Anna',
+                      phone: '0170 1111111',
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        }),
+      ),
+    );
+
+    expect(result.ok).toBe(true);
+  });
+
   it('lehnt tote Referenzen ab, statt unsichtbare Datensätze einzuspielen', () => {
     const result = parseBackup(
       JSON.stringify(

@@ -24,11 +24,12 @@ import type { ID, ISODate, Kitten } from '../../types';
 import { db } from '../../db/db';
 import { checkLitterPause } from '../../domain/schedule';
 import { WEIGHT_LEVEL_TONE, type WeightAnalysis } from '../../domain/weight';
-import { ageInWeeks, dateOf, formatAge, formatDate } from '../../lib/date';
+import { dateOf, formatAge, formatDate, todayISO } from '../../lib/date';
 import { formatGainPerDay, formatGrams } from '../../lib/format';
 import {
   analyzeLitterWeights,
   countdownLabel,
+  isWeighingPhase,
   isLivingKitten,
   pregnancyInfo,
   summarizeLitter,
@@ -137,11 +138,12 @@ export function LitterDetailScreen() {
   const fatherName =
     cats.find((c) => c.id === litter.fatherId)?.callName ?? litter.fatherExternalName;
 
-  const summary = summarizeLitter(kittens, weights);
+  const refDate = todayISO();
+  const summary = summarizeLitter(kittens, weights, refDate, litter.birthDate);
   const info = pregnancyInfo(litter.matingDate, settings.gestationDays);
   const due = litter.dueDate ?? info?.dueDate;
   // Ab Woche 5 wird nicht mehr routinemäßig gewogen (F10).
-  const inWeighingPhase = litter.birthDate ? ageInWeeks(litter.birthDate) < 5 : false;
+  const inWeighingPhase = isWeighingPhase(litter.birthDate, refDate);
 
   const living = kittens
     .filter(isLivingKitten)

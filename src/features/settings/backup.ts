@@ -33,6 +33,7 @@ import {
 } from '../../types';
 import { clearSettingsCache, db } from '../../db/db';
 import { nowISO } from '../../lib/date';
+import { BROADCAST_KEY, isBroadcastRun } from '../waitlist/order';
 
 /* ------------------------------------------------------------------ */
 /*  Format                                                             */
@@ -436,6 +437,8 @@ const isIdArray: ValueCheck = (value) =>
 
 function matchesSchema(value: unknown, schema: RowSchema): value is Record<string, unknown> {
   if (!isRecord(value)) return false;
+  const allowed = new Set(Object.keys(schema));
+  if (Object.keys(value).some((key) => !allowed.has(key))) return false;
   for (const [key, rule] of Object.entries(schema)) {
     if (typeof rule === 'function') {
       if (!rule(value[key])) return false;
@@ -489,10 +492,10 @@ function isContractData(value: unknown): boolean {
     regularPriceCents: optional(isSafeInteger),
     discountCents: optional(isSafeInteger),
     breedingUseStartDate: optional(isISODate),
-    breedingUseMonths: optional(isNonNegativeInteger),
+    breedingUseMonths: optional(isPositiveInteger),
     breedingUseExtensionMonths: optional(isNonNegativeInteger),
     handoverDeadlineDays: optional(isNonNegativeInteger),
-    matingAttempts: optional(isNonNegativeInteger),
+    matingAttempts: optional(isPositiveInteger),
     backPaymentDays: optional(isNonNegativeInteger),
     signPlace: optional(isString),
     signDate: optional(isISODate),
@@ -781,6 +784,7 @@ const ROW_SCHEMAS = {
   notificationLog: {
     key: isId,
     firedAt: isISODateTime,
+    run: optional(isBroadcastRun),
   },
 } satisfies Record<BackupTableName, RowSchema>;
 
@@ -801,6 +805,13 @@ function validateTableRows(
       row.type !== (row.data as Record<string, unknown>).type
     ) {
       return `Datensatz ${index + 1} im Abschnitt „${BACKUP_TABLE_LABEL[name]}" enthält widersprüchliche Vertragsarten.`;
+    }
+    if (
+      name === 'notificationLog' &&
+      ((row.key === BROADCAST_KEY && !isBroadcastRun(row.run)) ||
+        (row.key !== BROADCAST_KEY && row.run !== undefined))
+    ) {
+      return `Datensatz ${index + 1} im Abschnitt „${BACKUP_TABLE_LABEL[name]}" enthält einen beschädigten Versandfortschritt.`;
     }
     const id = row[primaryKey] as string;
     if (ids.has(id)) {

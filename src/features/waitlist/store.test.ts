@@ -481,6 +481,16 @@ describe('Sammelnachricht in der Datenbank', () => {
     expect(await loadBroadcastRun()).toBeNull();
   });
 
+  it('ignoriert beschädigte Empfänger sicher, statt die Warteliste abstürzen zu lassen', async () => {
+    await db.notificationLog.put({
+      key: 'waitlist:broadcast',
+      firedAt: '2026-03-01T10:00:00.000Z',
+      run: { recipients: [null] },
+    } as never);
+
+    expect(await loadBroadcastRun()).toBeNull();
+  });
+
   it('überlebt einen Neustart der App', async () => {
     await saveBroadcastRun(run);
     // Ein Neustart bedeutet: nur die Datenbank bleibt übrig.

@@ -14,6 +14,17 @@ import { exactDaysBetween } from '../lib/date';
 
 export type WeightLevel = 'ok' | 'watch' | 'concern' | 'critical' | 'unknown';
 
+/**
+ * Wie viele Messungen ein lebendes Kitten am Bezugstag vollständig machen.
+ * In den ersten beiden Lebenswochen sind es zwei, danach eine. Ohne ein
+ * belastbares Alter bleibt die Oberfläche beim konservativen Einmal-Ziel.
+ */
+export function dailyWeightMeasurementTarget(ageDays?: number): 1 | 2 {
+  return Number.isFinite(ageDays) && (ageDays as number) >= 0 && (ageDays as number) < 14
+    ? 2
+    : 1;
+}
+
 export const WEIGHT_LEVEL_LABEL: Record<WeightLevel, string> = {
   ok: 'In Ordnung',
   watch: 'Beobachten',

@@ -136,27 +136,46 @@ export function measurementsOn(entries: WeightSample[], date: ISODate): number {
 }
 
 export interface DayProgress {
-  /** Kitten mit mindestens einer Messung an diesem Tag. */
+  /** Kitten, die ihr Messziel an diesem Tag vollständig erreicht haben. */
   done: number;
   total: number;
   doneIds: ID[];
   /** Gesamtzahl der Messungen an diesem Tag über alle Kitten. */
   measurements: number;
+  /** Sollzahl je Kitten an diesem Tag. */
+  targetPerKitten: number;
+  /** Sollzahl über alle Kitten. */
+  requiredMeasurements: number;
+  /** Messungen bis höchstens zum Soll je Kitten; Übererfüllung zählt nicht doppelt. */
+  creditedMeasurements: number;
 }
 
 export function dayProgress(
   kittenIds: ID[],
   entriesByKitten: ReadonlyMap<ID, WeightSample[]>,
   date: ISODate,
+  targetPerKitten = 1,
 ): DayProgress {
+  const target =
+    Number.isSafeInteger(targetPerKitten) && targetPerKitten > 0 ? targetPerKitten : 1;
   const doneIds: ID[] = [];
   let measurements = 0;
+  let creditedMeasurements = 0;
   for (const id of kittenIds) {
     const n = measurementsOn(entriesByKitten.get(id) ?? [], date);
     measurements += n;
-    if (n > 0) doneIds.push(id);
+    creditedMeasurements += Math.min(n, target);
+    if (n >= target) doneIds.push(id);
   }
-  return { done: doneIds.length, total: kittenIds.length, doneIds, measurements };
+  return {
+    done: doneIds.length,
+    total: kittenIds.length,
+    doneIds,
+    measurements,
+    targetPerKitten: target,
+    requiredMeasurements: kittenIds.length * target,
+    creditedMeasurements,
+  };
 }
 
 /* ------------------------------------------------------------------ */

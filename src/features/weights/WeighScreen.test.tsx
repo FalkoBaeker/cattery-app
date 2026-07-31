@@ -9,6 +9,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { db, wipeDatabase } from '../../db/db';
 import type { Kitten } from '../../types';
+import { addDays, todayISO } from '../../lib/date';
 import { ConfirmProvider, ToastProvider } from '../../ui';
 import { WeighScreen } from './WeighScreen';
 
@@ -60,6 +61,11 @@ function renderScreen() {
       </ConfirmProvider>
     </ToastProvider>,
   );
+}
+
+function todayAt(hour: number): string {
+  const [year, month, day] = todayISO().split('-').map(Number);
+  return new Date(year, month - 1, day, hour, 0, 0).toISOString();
 }
 
 beforeAll(() => {
@@ -165,6 +171,27 @@ describe('WeighScreen', () => {
     });
     expect(await screen.findByText('1 von 3 gewogen')).toBeInTheDocument();
     expect(await screen.findByText('2× erfasst')).toBeInTheDocument();
+  });
+
+  it('meldet in den ersten zwei Wochen nach der ersten Runde noch kein Tagesziel', async () => {
+    const today = todayISO();
+    await db.litters.update('l1', { birthDate: addDays(today, -5) });
+    await db.weights.bulkPut([
+      { id: 'w1', kittenId: 'k1', at: todayAt(7), grams: 128 },
+      { id: 'w2', kittenId: 'k2', at: todayAt(7), grams: 131 },
+      { id: 'w3', kittenId: 'k3', at: todayAt(7), grams: 126 },
+    ]);
+
+    renderScreen();
+
+    expect(await screen.findByText('3 von 6 Messungen')).toBeInTheDocument();
+    expect(screen.getByText('0 von 3 vollständig')).toBeInTheDocument();
+    const progress = screen.getByRole('progressbar', {
+      name: 'Wiege-Fortschritt: 3 von 6 Messungen',
+    });
+    expect(progress).toHaveAttribute('aria-valuemax', '6');
+    expect(progress).toHaveAttribute('aria-valuenow', '3');
+    expect(screen.queryByText('3 von 3 gewogen')).not.toBeInTheDocument();
   });
 
   it('nimmt eine gerade gespeicherte Messung wieder zurück', async () => {

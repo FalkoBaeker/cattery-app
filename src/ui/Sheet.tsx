@@ -17,6 +17,7 @@ import { Button, IconButton } from './Button';
 
 let lockCount = 0;
 let savedScrollY = 0;
+const escapeStack: symbol[] = [];
 
 /**
  * Verhindert, dass die Seite hinter einem Blatt mitscrollt. Auf iOS reicht
@@ -85,6 +86,39 @@ export function useFocusTrap(ref: React.RefObject<HTMLElement | null>, active: b
   }, [ref, active]);
 }
 
+/**
+ * Schließt bei Escape ausschließlich die oberste Dialogebene.
+ *
+ * Ein Bestätigungsdialog kann über einem noch geöffneten Sheet liegen. Ohne
+ * gemeinsamen Stapel reagieren sonst beide globalen Listener auf denselben
+ * Tastendruck und der ungespeicherte Entwurf darunter geht ebenfalls zu.
+ */
+function useTopmostEscape(active: boolean, onEscape: () => void) {
+  const token = useRef(Symbol('dialog'));
+  const callback = useRef(onEscape);
+  callback.current = onEscape;
+
+  useEffect(() => {
+    if (!active) return;
+    const current = token.current;
+    escapeStack.push(current);
+
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape' || escapeStack[escapeStack.length - 1] !== current) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      callback.current();
+    }
+
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      const index = escapeStack.lastIndexOf(current);
+      if (index >= 0) escapeStack.splice(index, 1);
+    };
+  }, [active]);
+}
+
 /* ------------------------------------------------------------------ */
 /*  Blatt von unten                                                    */
 /* ------------------------------------------------------------------ */
@@ -106,15 +140,7 @@ export function Sheet({ open, onClose, title, action, children, footer, tall }: 
   const panelRef = useRef<HTMLDivElement>(null);
   useScrollLock(open);
   useFocusTrap(panelRef, open);
-
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
-    }
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+  useTopmostEscape(open, onClose);
 
   if (!open) return null;
 
@@ -193,14 +219,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  useEffect(() => {
-    if (!state) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') close(false);
-    }
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [state, close]);
+  useTopmostEscape(state !== null, () => close(false));
 
   return (
     <ConfirmContext.Provider value={confirm}>

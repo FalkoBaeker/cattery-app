@@ -21,7 +21,9 @@ import type {
 import { db, insert, insertPlain, patch, remove, type NotificationLogEntry } from '../../db/db';
 import { nowISO } from '../../lib/date';
 import {
+  BROADCAST_KEY,
   duePurgeIds,
+  isBroadcastRun,
   nextSortIndex,
   type BroadcastRun,
   type SortUpdate,
@@ -327,7 +329,7 @@ export async function deleteContactNote(id: ID): Promise<void> {
  * Eine eigene Tabelle wäre sauberer, liegt aber außerhalb dieses Moduls;
  * siehe Abschlussbericht.
  */
-export const BROADCAST_KEY = 'waitlist:broadcast';
+export { BROADCAST_KEY } from './order';
 
 interface BroadcastRow extends NotificationLogEntry {
   run: BroadcastRun;
@@ -340,7 +342,7 @@ function broadcastTable(): Table<BroadcastRow, string> {
 /** Liefert den laufenden Versand oder null. */
 export async function loadBroadcastRun(): Promise<BroadcastRun | null> {
   const row = await broadcastTable().get(BROADCAST_KEY);
-  if (!row?.run || !Array.isArray(row.run.recipients)) return null;
+  if (!isBroadcastRun(row?.run)) return null;
   return row.run;
 }
 

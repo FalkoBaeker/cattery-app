@@ -27,7 +27,12 @@ import type {
   WeightEntry,
 } from '../../types';
 import { HEALTH_TEST_LABEL, kittenLabel } from '../../types';
-import { analyzeWeights, litterAverageWeight, type WeightLevel } from '../../domain/weight';
+import {
+  analyzeWeights,
+  dailyWeightMeasurementTarget,
+  litterAverageWeight,
+  type WeightLevel,
+} from '../../domain/weight';
 import { isActionable } from '../../domain/schedule';
 import { addDays, dateOf, daysBetween, formatDate } from '../../lib/date';
 
@@ -260,7 +265,7 @@ export function buildDashboard(input: DashboardInput): DashboardModel {
         // Eine einzelne Morgenmessung darf die Erinnerung für den zweiten
         // Tageswert nicht bereits als erledigt markieren.
         const measurementsToday = entries.filter((entry) => dateOf(entry.at) === today).length;
-        if (measurementsToday < 2) pending += 1;
+        if (measurementsToday < dailyWeightMeasurementTarget(ageDays)) pending += 1;
         continue;
       }
 

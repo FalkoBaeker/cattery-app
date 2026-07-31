@@ -337,6 +337,7 @@ export function Switch({
         aria-hidden="true"
         className={[
           'relative h-[31px] w-[51px] shrink-0 rounded-full transition-colors duration-200',
+          'peer-focus-visible:ring-2 peer-focus-visible:ring-accent peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-bg',
           checked ? 'bg-ok' : 'bg-surface-3',
         ].join(' ')}
       >
@@ -436,24 +437,47 @@ export function ChoiceGrid<T extends string>({
   label?: string;
   columns?: number;
 }) {
+  const buttonsRef = useRef<Array<HTMLButtonElement | null>>([]);
+
+  function selectWithKeyboard(index: number, key: string) {
+    const last = options.length - 1;
+    let next = index;
+    if (key === 'ArrowRight' || key === 'ArrowDown') next = index === last ? 0 : index + 1;
+    else if (key === 'ArrowLeft' || key === 'ArrowUp') next = index === 0 ? last : index - 1;
+    else if (key === 'Home') next = 0;
+    else if (key === 'End') next = last;
+    else return false;
+
+    onChange(options[next].value);
+    buttonsRef.current[next]?.focus();
+    return true;
+  }
+
   return (
     <div className="flex flex-col gap-1.5">
       {label && <span className="px-1 text-[0.85rem] font-medium text-text-dim">{label}</span>}
       <div
         role="radiogroup"
-        aria-label={label}
+        aria-label={label ?? 'Auswahl'}
         className="grid gap-2"
         style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
       >
-        {options.map((o) => {
+        {options.map((o, index) => {
           const active = o.value === value;
           return (
             <button
+              ref={(node) => {
+                buttonsRef.current[index] = node;
+              }}
               key={o.value}
               type="button"
               role="radio"
               aria-checked={active}
+              tabIndex={active || (value === null && index === 0) ? 0 : -1}
               onClick={() => onChange(o.value)}
+              onKeyDown={(event) => {
+                if (selectWithKeyboard(index, event.key)) event.preventDefault();
+              }}
               className={[
                 'flex min-h-16 flex-col items-start justify-center gap-1 rounded-[var(--radius-card)] border p-3 text-left transition-colors',
                 active
