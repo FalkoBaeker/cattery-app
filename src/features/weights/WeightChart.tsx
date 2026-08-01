@@ -35,7 +35,9 @@ export function WeightChart({
   series,
   focusKittenId,
   birthDate,
-  height = 200,
+  // Mehr Höhe bei gleicher Gramm-Skala: nahe Kurven bekommen sichtbar mehr
+  // Abstand, ohne dass Werte oder Achseneinteilung verfälscht werden.
+  height = 280,
   legend = true,
   emptyHint = 'Sobald das erste Gewicht eingetragen ist, entsteht hier die Kurve.',
   className = '',

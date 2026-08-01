@@ -66,6 +66,25 @@ describe('WeightChart', () => {
       'stroke-width',
       '3.2',
     );
+    expect(container.querySelector('svg')).toHaveAttribute('viewBox', '0 0 340 280');
+  });
+
+  it('übernimmt eine größere Höhe, ohne die Breite oder Daten zu verändern', () => {
+    const series: ChartSeriesInput[] = [
+      {
+        kittenId: 'a',
+        label: 'Rot',
+        hex: '#d61f2c',
+        entries: [
+          { at: at(2026, 3, 3), grams: 95 },
+          { at: at(2026, 3, 4), grams: 108 },
+        ],
+      },
+    ];
+    const { container } = render(
+      <WeightChart series={series} birthDate="2026-03-03" height={360} />,
+    );
+    expect(container.querySelector('svg')).toHaveAttribute('viewBox', '0 0 340 360');
   });
 
   it('bleibt mit neun Kitten lesbar und beschriftet die Legende', () => {

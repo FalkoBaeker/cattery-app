@@ -519,7 +519,7 @@ export function WeighScreen() {
           <WeightChart
             series={view.series}
             birthDate={birthDate}
-            height={190}
+            height={270}
             emptyHint="Trag das erste Gewicht ein — danach wächst hier die Kurve mit jedem Wiegen."
           />
         </Card>
@@ -533,7 +533,7 @@ export function WeighScreen() {
         <WeightChart
           series={view.series}
           birthDate={birthDate}
-          height={230}
+          height={360}
           emptyHint="Sobald du das erste Gewicht einträgst, entsteht hier die Kurve des ganzen Wurfes."
         />
       </Sheet>
@@ -801,7 +801,7 @@ function KittenDetail({
           series={series}
           focusKittenId={kitten.id}
           birthDate={ownBirthDate}
-          height={210}
+          height={300}
           emptyHint="Für dieses Kitten ist noch kein Gewicht erfasst."
         />
       </div>
