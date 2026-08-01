@@ -39,6 +39,21 @@ describe('gemeinsame Datenbankhelfer', () => {
     });
   });
 
+  it('hebt nur den alten Russisch-Blau-Standard für niedriges Geburtsgewicht auf 86 g an', () => {
+    const legacy = {
+      ...DEFAULT_SETTINGS,
+      breed: 'Russisch Blau',
+      weight: { ...DEFAULT_SETTINGS.weight, concernBirthWeightG: 80 },
+    };
+    expect(mergeSettings(legacy).weight.concernBirthWeightG).toBe(86);
+    expect(
+      mergeSettings({
+        ...legacy,
+        weight: { ...legacy.weight, concernBirthWeightG: 79 },
+      }).weight.concernBirthWeightG,
+    ).toBe(79);
+  });
+
   it('ändert zeitstempellose Datensätze über patchPlain', async () => {
     const row: WeightEntry = {
       id: 'gewicht-1',

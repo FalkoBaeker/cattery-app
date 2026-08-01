@@ -43,18 +43,19 @@ export const SEX_LABEL: Record<SexOrUnknown, string> = {
  * Reihenfolge = Vorschlagsreihenfolge beim Anlegen eines Wurfes.
  */
 export const COLLAR_COLORS = [
-  { key: 'red', label: 'Rot', hex: '#e5484d' },
-  { key: 'blue', label: 'Blau', hex: '#3b82f6' },
-  { key: 'green', label: 'Grün', hex: '#30a46c' },
-  { key: 'yellow', label: 'Gelb', hex: '#f5b800' },
-  { key: 'purple', label: 'Lila', hex: '#8e4ec6' },
-  { key: 'orange', label: 'Orange', hex: '#f76b15' },
-  { key: 'pink', label: 'Rosa', hex: '#e93d82' },
-  { key: 'turquoise', label: 'Türkis', hex: '#00a2c7' },
-  { key: 'white', label: 'Weiß', hex: '#d7dbdf' },
-  { key: 'black', label: 'Schwarz', hex: '#4a4a4a' },
-  { key: 'brown', label: 'Braun', hex: '#8b5a2b' },
-  { key: 'none', label: 'ohne', hex: '#9ca3af' },
+  { key: 'red', label: 'Rot', hex: '#d61f2c' },
+  { key: 'blue', label: 'Blau', hex: '#1769e0' },
+  { key: 'green', label: 'Grün', hex: '#138a4b' },
+  { key: 'yellow', label: 'Gelb', hex: '#e3a500' },
+  { key: 'purple', label: 'Lila', hex: '#7b2cbf' },
+  { key: 'orange', label: 'Orange', hex: '#f26a1b' },
+  { key: 'pink', label: 'Rosa', hex: '#ff4fa3' },
+  { key: 'turquoise', label: 'Türkis', hex: '#0097a7' },
+  { key: 'white', label: 'Weiß', hex: '#eef0f2' },
+  { key: 'black', label: 'Schwarz', hex: '#15181c' },
+  { key: 'beige', label: 'Beige', hex: '#c7a36b' },
+  { key: 'brown', label: 'Braun', hex: '#70401f' },
+  { key: 'none', label: 'ohne', hex: '#8b929b' },
 ] as const;
 
 export type CollarColorKey = (typeof COLLAR_COLORS)[number]['key'];
@@ -738,7 +739,7 @@ export interface WeightThresholds {
   goodGainG: number;
   /** Darunter wird beobachtet. */
   watchGainG: number;
-  /** Absolutes Gewicht, unter dem ein Neugeborenes als Sorgenkind gilt. */
+  /** Absolutes Gewicht, bis zu dem ein Neugeborenes als niedrig geboren gilt. */
   concernBirthWeightG: number;
   /** Abweichung vom Wurfdurchschnitt in Prozent, ab der gewarnt wird. */
   belowLitterAvgPercent: number;
@@ -793,7 +794,7 @@ export const DEFAULT_SETTINGS: Settings = {
   weight: {
     goodGainG: 7,
     watchGainG: 6,
-    concernBirthWeightG: 80,
+    concernBirthWeightG: 86,
     belowLitterAvgPercent: 15,
     typicalBirthWeightG: 90,
   },

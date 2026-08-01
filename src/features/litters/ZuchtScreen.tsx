@@ -8,6 +8,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import {
   Badge,
   Button,
+  Callout,
   EmptyState,
   Fab,
   Icon,
@@ -18,9 +19,10 @@ import {
   Sheet,
   Stack,
 } from '../../ui';
-import type { Cat, ID, Litter } from '../../types';
+import { kittenLabel, type Cat, type ID, type Litter } from '../../types';
 import { db } from '../../db/db';
 import { formatDate, todayISO } from '../../lib/date';
+import { formatGainPerDay, formatGrams } from '../../lib/format';
 import { CatEditorSheet, CatRow } from '../cats';
 import {
   analyzeLitterWeights,
@@ -30,7 +32,7 @@ import {
   summarizeLitter,
 } from './litter';
 import { useSettings } from './hooks';
-import { Loading } from './parts';
+import { CollarDot, Loading, WeightLevelBadge } from './parts';
 import { PlannedLitterCard, RunningLitterCard } from './LitterCard';
 import { LitterEditorSheet } from './LitterEditorSheet';
 
@@ -46,6 +48,7 @@ export function ZuchtScreen() {
   const [litterSheet, setLitterSheet] = useState(false);
   const [catSheet, setCatSheet] = useState(false);
   const [showClosed, setShowClosed] = useState(false);
+  const [warningLitterId, setWarningLitterId] = useState<ID | null>(null);
 
   const data = useLiveQuery(async () => {
     const [litters, cats, kittens, tasks] = await Promise.all([
@@ -86,10 +89,24 @@ export function ZuchtScreen() {
           settings.weight,
           litter.birthDate,
         );
+        const warningKittens = kittens
+          .flatMap((kitten) => {
+            const analysis = analyses.get(kitten.id);
+            return analysis?.level === 'concern' || analysis?.level === 'critical'
+              ? [{ kitten, analysis }]
+              : [];
+          })
+          .sort(
+            (a, b) =>
+              Number(b.analysis.level === 'critical') -
+                Number(a.analysis.level === 'critical') ||
+              kittenLabel(a.kitten).localeCompare(kittenLabel(b.kitten), 'de'),
+          );
         return {
           litter,
           summary: summarizeLitter(kittens, weights, todayISO(), litter.birthDate),
           warnings: countWeightWarnings(analyses),
+          warningKittens,
           nextTask: nextOpenTask(data.tasks.filter((t) => t.litterId === litter.id)),
         };
       });
@@ -113,6 +130,8 @@ export function ZuchtScreen() {
         .sort((a, b) => (b.birthDate ?? '').localeCompare(a.birthDate ?? '')),
     [data?.litters],
   );
+
+  const warningSelection = running.find(({ litter }) => litter.id === warningLitterId);
 
   const queens = useMemo(
     () =>
@@ -217,6 +236,11 @@ export function ZuchtScreen() {
                     settings={settings}
                     showWeights={showWeights}
                     onOpen={() => navigate(`/zucht/wurf/${litter.id}`)}
+                    onOpenWarnings={
+                      showWeights && warnings > 0
+                        ? () => setWarningLitterId(litter.id)
+                        : undefined
+                    }
                     onWeigh={
                       showWeights ? () => navigate(`/wiegen/${litter.id}`) : undefined
                     }
@@ -332,6 +356,61 @@ export function ZuchtScreen() {
       )}
 
       <Fab label="Anlegen" onClick={() => setCreateSheet(true)} />
+
+      {/* Eine einzige kompakte Ebene: Warnung antippen, betroffene Kitten sehen,
+          bei Bedarf direkt ins Detail wechseln. */}
+      <Sheet
+        open={Boolean(warningSelection)}
+        onClose={() => setWarningLitterId(null)}
+        title="Gewichtsauffälligkeiten"
+        footer={
+          warningSelection ? (
+            <Button
+              block
+              icon="paw"
+              onClick={() => {
+                const litterId = warningSelection.litter.id;
+                setWarningLitterId(null);
+                navigate(`/zucht/wurf/${litterId}`);
+              }}
+            >
+              Alle Kitten im Wurf
+            </Button>
+          ) : undefined
+        }
+      >
+        {warningSelection && (
+          <Stack gap="md">
+            <Callout tone="warn" icon="alert">
+              Hier stehen nur die Kitten, deren aktueller Gewichtsverlauf auffällig oder
+              kritisch ist. Ein Eintrag verschwindet automatisch, sobald die Entwicklung
+              wieder stabil ist.
+            </Callout>
+            <List>
+              {warningSelection.warningKittens.map(({ kitten, analysis }) => {
+                const weight = analysis.latest ? formatGrams(analysis.latest.grams) : 'Noch kein Gewicht';
+                const gain = analysis.gainPerDay == null
+                  ? undefined
+                  : formatGainPerDay(analysis.gainPerDay);
+                const reason = analysis.reasons[0];
+                return (
+                  <ListRow
+                    key={kitten.id}
+                    leading={<CollarDot colorKey={kitten.collarColor} size={18} />}
+                    title={kittenLabel(kitten)}
+                    subtitle={[weight, gain, reason].filter(Boolean).join(' · ')}
+                    trailing={<WeightLevelBadge level={analysis.level} />}
+                    onClick={() => {
+                      setWarningLitterId(null);
+                      navigate(`/zucht/kitten/${kitten.id}`);
+                    }}
+                  />
+                );
+              })}
+            </List>
+          </Stack>
+        )}
+      </Sheet>
 
       {/* --- Auswahl beim Anlegen --------------------------------- */}
       <Sheet open={createSheet} onClose={() => setCreateSheet(false)} title="Was möchtest du anlegen?">

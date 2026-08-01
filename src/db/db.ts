@@ -195,11 +195,24 @@ export function clearSettingsCache(): void {
 /** Ergänzt fehlende Zweige, damit ältere Datenstände nicht abstürzen. */
 export function mergeSettings(stored?: Settings | null): Settings {
   if (!stored) return DEFAULT_SETTINGS;
+  // Bis Version 1.0 war für Russisch Blau pauschal 80 g vorbelegt. Die
+  // rassespezifische Auswertung verwendet nun 86 g. Nur der alte exakte
+  // Vorgabewert wird angehoben; bewusst angepasste Werte bleiben erhalten.
+  const breed = stored.breed?.trim().toLocaleLowerCase('de-DE');
+  const legacyRussianBlueThreshold =
+    (breed === 'russisch blau' || breed === 'russian blue' || breed === 'nebelung') &&
+    stored.weight?.concernBirthWeightG === 80;
   return {
     ...DEFAULT_SETTINGS,
     ...stored,
     seller: { ...DEFAULT_SETTINGS.seller, ...stored.seller },
-    weight: { ...DEFAULT_SETTINGS.weight, ...stored.weight },
+    weight: {
+      ...DEFAULT_SETTINGS.weight,
+      ...stored.weight,
+      ...(legacyRussianBlueThreshold
+        ? { concernBirthWeightG: DEFAULT_SETTINGS.weight.concernBirthWeightG }
+        : {}),
+    },
     schedule: { ...DEFAULT_SETTINGS.schedule, ...stored.schedule },
     modules: { ...DEFAULT_SETTINGS.modules, ...stored.modules },
     id: 'singleton',

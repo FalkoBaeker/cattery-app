@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CareTask, Kitten, KittenSaleStatus, SexOrUnknown } from '../../types';
-import { DEFAULT_SETTINGS } from '../../types';
+import { COLLAR_COLORS, DEFAULT_SETTINGS } from '../../types';
 import {
   analyzeLitterWeights,
   countWeightWarnings,
@@ -564,6 +564,19 @@ describe('analyzeLitterWeights', () => {
 /* ------------------------------------------------------------------ */
 
 describe('suggestCollarColor', () => {
+  it('bietet Lila und Beige mit einer von Rot und Rosa klar getrennten Palette an', () => {
+    expect(COLLAR_COLORS).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ key: 'purple', label: 'Lila' }),
+        expect.objectContaining({ key: 'beige', label: 'Beige' }),
+      ]),
+    );
+    const red = COLLAR_COLORS.find((color) => color.key === 'red')?.hex;
+    const pink = COLLAR_COLORS.find((color) => color.key === 'pink')?.hex;
+    expect(red).not.toBe(pink);
+    expect(new Set(COLLAR_COLORS.map((color) => color.hex)).size).toBe(COLLAR_COLORS.length);
+  });
+
   it('beginnt mit der ersten Farbe', () => {
     expect(suggestCollarColor([])).toBe('red');
   });
@@ -584,6 +597,7 @@ describe('suggestCollarColor', () => {
       'turquoise',
       'white',
       'black',
+      'beige',
       'brown',
     ] as const;
     expect(suggestCollarColor([...alle])).toBe('none');

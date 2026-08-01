@@ -62,6 +62,10 @@ describe('WeightChart', () => {
     const { container } = render(<WeightChart series={series} birthDate="2026-03-03" />);
     // Farbige Linie plus heller Saum darunter.
     expect(container.querySelectorAll('path')).toHaveLength(2);
+    expect(container.querySelector('path[stroke="#e5484d"]')).toHaveAttribute(
+      'stroke-width',
+      '3.2',
+    );
   });
 
   it('bleibt mit neun Kitten lesbar und beschriftet die Legende', () => {

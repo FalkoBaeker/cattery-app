@@ -444,7 +444,10 @@ export function nextOpenTask(tasks: CareTask[]): CareTask | undefined {
 /*  Gewichtsbewertung eines ganzen Wurfes                              */
 /* ------------------------------------------------------------------ */
 
-export type WeighedKitten = Pick<Kitten, 'id' | 'stillborn' | 'saleStatus' | 'birthWeightG'>;
+export type WeighedKitten = Pick<
+  Kitten,
+  'id' | 'stillborn' | 'saleStatus' | 'birthWeightG' | 'bornAt'
+>;
 
 /**
  * Bewertet alle lebenden Kitten eines Wurfes auf einmal. Der Wurfdurchschnitt
@@ -477,6 +480,8 @@ export function analyzeLitterWeights(
         birthWeightG: k.birthWeightG,
         litterAverageG: litterAverageWeight(byKitten, k.id),
         ageDays,
+        birthDate,
+        birthAt: k.bornAt,
       }),
     );
   }

@@ -327,7 +327,7 @@ describe('analyzeKitten', () => {
     expect(a.gainSinceBirthRatio).toBeCloseTo(1, 6);
   });
 
-  it('erkennt ein Sorgenkind am Geburtsgewicht unter 80 g', () => {
+  it('erkennt ein niedriges Geburtsgewicht bis 86 g', () => {
     const a = analyzeKitten({
       kittenId: 'a',
       entries: [sample(2026, 3, 3, 8, 74), sample(2026, 3, 4, 8, 84)],
@@ -336,7 +336,7 @@ describe('analyzeKitten', () => {
       thresholds: T,
     });
     expect(a.level).toBe('concern');
-    expect(a.reasons.join(' ')).toContain('80');
+    expect(a.reasons.join(' ')).toContain('Niedriges Geburtsgewicht');
   });
 
   it('vergleicht mit dem Wurfdurchschnitt ohne das eigene Gewicht', () => {

@@ -201,7 +201,7 @@ export function SettingsScreen() {
             <ListRow
               leading={<RowIcon name="scale" />}
               title="Gewichtsschwellen"
-              subtitle={`Gut ab ${settings.weight.goodGainG} g/Tag · Sorgenkind unter ${settings.weight.concernBirthWeightG} g`}
+              subtitle={`Gut ab ${settings.weight.goodGainG} g/Tag · niedriges Geburtsgewicht bis ${settings.weight.concernBirthWeightG} g`}
               onClick={() => setSheet('weight')}
             />
             <ListRow
@@ -695,14 +695,15 @@ function WeightSheet({
         </Explain>
 
         <NumberInput
-          label="Sorgenkind unter"
+          label="Niedriges Geburtsgewicht bis"
           suffix="g"
           value={draft.concernBirthWeightG}
           onValueChange={(v) => setDraft({ ...draft, concernBirthWeightG: v })}
         />
         <Explain>
-          Absolutes Geburtsgewicht, keine Prozentangabe. Wer darunter zur Welt kommt,
-          erscheint dauerhaft in den Warnungen auf „Heute".
+          Rassespezifischer Startwert. Für Russisch Blau/Nebelung sind 86 g vorbelegt.
+          Nach erfolgreicher Aufholentwicklung bis Tag 2 und Tag 7 verschwindet die aktuelle
+          Auffälligkeit; der niedrige Start bleibt nur als Information erhalten.
         </Explain>
 
         <NumberInput

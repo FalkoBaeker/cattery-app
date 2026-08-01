@@ -100,12 +100,16 @@ bei Lücken.
 | --- | --- |
 | **in Ordnung** | Zunahme ≥ 7 g/Tag |
 | **beobachten** | Zunahme 6–7 g/Tag |
-| **auffällig** | Zunahme < 6 g/Tag · Geburtsgewicht < 80 g · ≥ 15 % unter dem Wurfdurchschnitt |
+| **auffällig** | Zunahme < 6 g/Tag · niedriges Geburtsgewicht ohne bestätigte Aufholung · ≥ 15 % unter dem Wurfdurchschnitt |
 | **kritisch** | Gewichtsverlust · keine Zunahme · Geburtsgewicht nach 48 h nicht wieder erreicht |
 
-Typisches Geburtsgewicht bei ihr: **90 g**. Ein Kitten unter **80 g** gilt als
-Sorgenkind (absoluter Wert, nicht prozentual — das war eine ausdrückliche
-Rückfrage).
+Typisches Geburtsgewicht bei ihr: **90 g**. Für Russisch Blau/Nebelung liegt
+die voreingestellte Schwelle für niedriges Geburtsgewicht bei **86 g**. Der
+Startkontext bleibt historisch sichtbar, die aktive Warnung kann aber nach
+bestätigter Aufholung verschwinden: +9,5 % bis Tag 2 führt zunächst zu
+„Beobachten", +58 % bis Tag 7 hebt den Geburtsgewichts-Marker auf. Wird Tag 7
+verfehlt, genügen später drei steigende Messungen über mindestens zwei Tage
+bei aktuell guter Tageszunahme.
 
 Alle Schwellen sind in den Einstellungen änderbar.
 
@@ -115,7 +119,8 @@ Alle Schwellen sind in den Einstellungen änderbar.
 
 Kitten werden über die **Halsbandfarbe** unterschieden, nicht über Namen —
 Rufnamen werden erst später vergeben. Die Halsbandfarbe ist die primäre
-Identität und wird als Farbpunkt dargestellt. Zwölf Farben sind hinterlegt.
+Identität und wird als Farbpunkt dargestellt. Zwölf Farben sind hinterlegt,
+darunter Lila und Beige; Rot und Rosa sind bewusst kräftig getrennt.
 
 ### Der Wiege-Modus
 

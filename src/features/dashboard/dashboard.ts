@@ -226,6 +226,8 @@ export function buildDashboard(input: DashboardInput): DashboardModel {
         birthWeightG: k.birthWeightG,
         litterAverageG: average,
         ageDays: daysBetween(litter.birthDate, dateOf(latestAt)),
+        birthDate: litter.birthDate,
+        birthAt: k.bornAt,
       });
       if (analysis.level !== 'critical' && analysis.level !== 'concern') continue;
       weightAlerts.push({

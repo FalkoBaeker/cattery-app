@@ -109,7 +109,7 @@ export function WeightChart({
         {model.series.map((s) => {
           const showDots = !dense || (focusKittenId ? s.focus : false);
           return (
-            <g key={s.kittenId} opacity={s.focus ? 1 : 0.32}>
+            <g key={s.kittenId} opacity={s.focus ? 1 : 0.52}>
               {/* Heller Saum unter jeder Kurve: Halsbandfarben wie Schwarz
                   oder Weiß gehen sonst im dunklen bzw. hellen Hintergrund
                   unter — auch auf der Wurfkurve ohne betrachtetes Kitten. */}
@@ -119,7 +119,7 @@ export function WeightChart({
                   fill="none"
                   className="text-surface"
                   stroke="currentColor"
-                  strokeWidth={s.focus ? 4 : 2.6}
+                  strokeWidth={s.focus ? 5.4 : 3.8}
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
@@ -129,7 +129,7 @@ export function WeightChart({
                   d={s.path}
                   fill="none"
                   stroke={s.hex}
-                  strokeWidth={s.focus ? 2.2 : 1.3}
+                  strokeWidth={s.focus ? 3.2 : 2}
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
@@ -139,11 +139,11 @@ export function WeightChart({
                   key={`n-${s.kittenId}-${n.date}`}
                   cx={n.px}
                   cy={n.py}
-                  r={s.focus ? 2.6 : 1.6}
+                  r={s.focus ? 3.2 : 2.2}
                   fill={s.hex}
                   className="text-surface"
                   stroke="currentColor"
-                  strokeWidth={s.focus ? 1 : 0.7}
+                  strokeWidth={s.focus ? 1.2 : 0.9}
                 />
               ))}
               {showDots &&
@@ -152,9 +152,9 @@ export function WeightChart({
                     key={`d-${s.kittenId}-${d.at}`}
                     cx={d.px}
                     cy={d.py}
-                    r={1.5}
+                    r={1.8}
                     fill={s.hex}
-                    opacity={0.55}
+                    opacity={0.72}
                   />
                 ))}
             </g>
@@ -179,7 +179,7 @@ export function WeightChart({
                   s.focus ? 'text-text' : 'text-text-dim',
                 ].join(' ')}
               >
-                <ColorDot hex={s.hex} size={9} />
+                <ColorDot hex={s.hex} size={11} />
                 <span className="max-w-[9rem] truncate">{s.label}</span>
                 {s.latestGrams != null && (
                   <span className="tabular text-text-faint">{formatGrams(s.latestGrams)}</span>

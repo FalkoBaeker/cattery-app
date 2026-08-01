@@ -9,8 +9,8 @@
  *  - Die App bewertet und warnt, gibt aber ausdrücklich keine Handlungsempfehlung.
  */
 
-import type { ISODateTime, WeightEntry, WeightThresholds } from '../types';
-import { exactDaysBetween } from '../lib/date';
+import type { ISODate, ISODateTime, WeightEntry, WeightThresholds } from '../types';
+import { dateOf, daysBetween, exactDaysBetween } from '../lib/date';
 
 export type WeightLevel = 'ok' | 'watch' | 'concern' | 'critical' | 'unknown';
 
@@ -56,6 +56,13 @@ export interface WeightAnalysis {
   level: WeightLevel;
   /** Klartext-Begründungen für die Einstufung. */
   reasons: string[];
+  /** Historischer Startkontext; beeinflusst den Status nur bis zur Aufholung. */
+  birthWeightContext?: {
+    category: 'low' | 'very-low';
+    phase: 'pending' | 'early-recovery' | 'recovered' | 'late-recovery';
+    thresholdG: number;
+    gainPercent?: number;
+  };
 }
 
 /** Sortiert nach Zeit, aufsteigend. */
@@ -108,6 +115,70 @@ export interface AnalyzeOptions {
   litterAverageG?: number;
   /** Alter in Tagen zum Zeitpunkt der letzten Messung. */
   ageDays?: number;
+  /** Geburtsdatum oder genauer Zeitpunkt für die Tag-2-/Tag-7-Auswertung. */
+  birthDate?: ISODate;
+  birthAt?: ISODateTime;
+}
+
+/** Studienbasierte Aufholziele für niedrig geborene Kitten. */
+export const LOW_BIRTH_DAY2_GAIN_PERCENT = 9.5;
+export const LOW_BIRTH_DAY7_GAIN_PERCENT = 58;
+export const VERY_LOW_BIRTH_WEIGHT_G = 60;
+
+const LEVEL_SEVERITY: Record<WeightLevel, number> = {
+  unknown: 0,
+  ok: 1,
+  watch: 2,
+  concern: 3,
+  critical: 4,
+};
+
+function atLeast(level: WeightLevel, minimum: WeightLevel): WeightLevel {
+  return LEVEL_SEVERITY[level] >= LEVEL_SEVERITY[minimum] ? level : minimum;
+}
+
+function pointAgeDays(
+  point: WeightPoint,
+  latest: WeightPoint,
+  options: AnalyzeOptions,
+): number | undefined {
+  if (options.birthAt) return exactDaysBetween(options.birthAt, point.at);
+  if (options.birthDate) return daysBetween(options.birthDate, dateOf(point.at));
+  if (options.ageDays != null) {
+    return options.ageDays - exactDaysBetween(point.at, latest.at);
+  }
+  return undefined;
+}
+
+/** Nächstgelegene Messung am Studien-Stichtag; außerhalb der Toleranz keine Hochrechnung. */
+function checkpointPoint(
+  points: WeightPoint[],
+  latest: WeightPoint,
+  options: AnalyzeOptions,
+  targetDay: number,
+  toleranceDays: number,
+): WeightPoint | undefined {
+  let best: { point: WeightPoint; distance: number } | undefined;
+  for (const point of points) {
+    const age = pointAgeDays(point, latest, options);
+    if (age == null) continue;
+    const distance = Math.abs(age - targetDay);
+    if (distance > toleranceDays) continue;
+    if (!best || distance < best.distance || (distance === best.distance && point.at > best.point.at)) {
+      best = { point, distance };
+    }
+  }
+  return best?.point;
+}
+
+function positiveRecoveryStreak(points: WeightPoint[], minimumSpanDays = 2): boolean {
+  if (points.length < 3) return false;
+  const lastThree = points.slice(-3);
+  if (exactDaysBetween(lastThree[0].at, lastThree[2].at) < minimumSpanDays) return false;
+  return (
+    lastThree[1].grams > lastThree[0].grams &&
+    lastThree[2].grams > lastThree[1].grams
+  );
 }
 
 /**
@@ -145,6 +216,7 @@ export function analyzeWeights(
   const gain = gainPerDay(points);
 
   let level: WeightLevel = 'unknown';
+  let birthWeightContext: WeightAnalysis['birthWeightContext'];
 
   /* --- kritisch ---------------------------------------------------- */
 
@@ -193,15 +265,6 @@ export function analyzeWeights(
     }
   }
 
-  // Diese beiden Punkte gelten unabhängig von der Zunahme. Kritisch bleibt
-  // kritisch — alles andere wird auf „auffällig" angehoben.
-  if (options.birthWeightG && options.birthWeightG < thresholds.concernBirthWeightG) {
-    if (level !== 'critical') level = 'concern';
-    reasons.push(
-      `Geburtsgewicht ${options.birthWeightG} g liegt unter ${thresholds.concernBirthWeightG} g.`,
-    );
-  }
-
   if (options.litterAverageG && options.litterAverageG > 0) {
     const belowPercent = ((options.litterAverageG - latest.grams) / options.litterAverageG) * 100;
     if (belowPercent >= thresholds.belowLitterAvgPercent) {
@@ -230,6 +293,110 @@ export function analyzeWeights(
     reasons.push('Für eine Bewertung fehlt eine zweite Wiegung.');
   }
 
+  /* --- niedriges Geburtsgewicht und Aufholung --------------------- */
+
+  if (
+    options.birthWeightG &&
+    options.birthWeightG <= thresholds.concernBirthWeightG
+  ) {
+    const category =
+      options.birthWeightG < VERY_LOW_BIRTH_WEIGHT_G ? 'very-low' : 'low';
+    const prefix = category === 'very-low' ? 'Sehr niedriges' : 'Niedriges';
+    const latestAge = pointAgeDays(latest, latest, options);
+    const baseContext = {
+      category,
+      thresholdG: thresholds.concernBirthWeightG,
+    } as const;
+
+    if (latestAge == null || latestAge < 2) {
+      level = atLeast(level, 'concern');
+      birthWeightContext = { ...baseContext, phase: 'pending' };
+      reasons.push(
+        `${prefix} Geburtsgewicht: ${options.birthWeightG} g. Entwicklung bis Tag 2 wird beobachtet.`,
+      );
+    } else if (latestAge < 7) {
+      const day2 = checkpointPoint(points, latest, options, 2, options.birthAt ? 0.75 : 0);
+      const gainPercent = day2
+        ? ((day2.grams - options.birthWeightG) / options.birthWeightG) * 100
+        : undefined;
+      const earlyRecovered =
+        day2 != null &&
+        day2.grams >= options.birthWeightG &&
+        gainPercent != null &&
+        gainPercent >= LOW_BIRTH_DAY2_GAIN_PERCENT;
+
+      if (earlyRecovered) {
+        level = atLeast(level, 'watch');
+        birthWeightContext = {
+          ...baseContext,
+          phase: 'early-recovery',
+          gainPercent,
+        };
+        reasons.push(
+          `Frühes Aufholziel erreicht (${gainPercent.toFixed(1)} % bis Tag 2); Entwicklung bis Tag 7 beobachten.`,
+        );
+      } else {
+        level = atLeast(level, 'concern');
+        birthWeightContext = {
+          ...baseContext,
+          phase: 'pending',
+          gainPercent,
+        };
+        reasons.push(
+          gainPercent == null
+            ? 'Für das Aufholziel an Tag 2 fehlt eine passende Messung.'
+            : `Aufholentwicklung bis Tag 2: ${gainPercent.toFixed(1)} % statt ${LOW_BIRTH_DAY2_GAIN_PERCENT} %.`,
+        );
+      }
+    } else {
+      const day7 = checkpointPoint(points, latest, options, 7, options.birthAt ? 1 : 0);
+      const gainPercent = day7
+        ? ((day7.grams - options.birthWeightG) / options.birthWeightG) * 100
+        : undefined;
+      const recoveredByDay7 =
+        day7 != null &&
+        day7.grams >= options.birthWeightG &&
+        gainPercent != null &&
+        gainPercent >= LOW_BIRTH_DAY7_GAIN_PERCENT;
+      const recoveredLater =
+        !recoveredByDay7 &&
+        latestAge > 7 &&
+        latest.grams >= options.birthWeightG &&
+        Boolean(gain && gain.value >= thresholds.goodGainG) &&
+        positiveRecoveryStreak(points);
+
+      if (recoveredByDay7) {
+        birthWeightContext = {
+          ...baseContext,
+          phase: 'recovered',
+          gainPercent,
+        };
+        reasons.push(
+          `${prefix} Geburtsgewicht bis Tag 7 aufgeholt (${gainPercent.toFixed(1)} %).`,
+        );
+      } else if (recoveredLater) {
+        birthWeightContext = {
+          ...baseContext,
+          phase: 'late-recovery',
+          gainPercent,
+        };
+        reasons.push(`${prefix} Geburtsgewicht durch stabile spätere Entwicklung aufgeholt.`);
+      } else {
+        level = atLeast(level, 'concern');
+        birthWeightContext = {
+          ...baseContext,
+          phase: 'pending',
+          gainPercent,
+        };
+        reasons.push(
+          gainPercent == null
+            ? 'Aufholentwicklung nach niedrigem Geburtsgewicht noch nicht bestätigt.'
+            : `Aufholentwicklung bis Tag 7: ${gainPercent.toFixed(1)} % statt ${LOW_BIRTH_DAY7_GAIN_PERCENT} %.`,
+        );
+      }
+    }
+  }
+
   return {
     latest,
     previous,
@@ -240,6 +407,7 @@ export function analyzeWeights(
     gainSinceBirthRatio,
     level,
     reasons,
+    birthWeightContext,
   };
 }
 

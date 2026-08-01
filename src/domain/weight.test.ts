@@ -8,7 +8,7 @@ import {
 } from './weight';
 import { DEFAULT_SETTINGS } from '../types';
 
-const T = DEFAULT_SETTINGS.weight; // gut ab 7, beobachten ab 6, Sorgenkind unter 80 g
+const T = DEFAULT_SETTINGS.weight; // gut ab 7, beobachten ab 6, niedriges Geburtsgewicht bis 86 g
 
 /** Bequemer Erzeuger: Tag-Offset in Tagen ab dem 03.03.2026, 08:00 Uhr. */
 function w(dayOffset: number, grams: number, hour = 8) {
@@ -144,10 +144,53 @@ describe('analyzeWeights', () => {
     expect(a.reasons.join(' ')).not.toContain('noch nicht wieder erreicht');
   });
 
-  it('markiert ein Geburtsgewicht unter 80 g als auffällig', () => {
+  it('markiert ein niedriges Geburtsgewicht zunächst als auffällig', () => {
     const a = analyzeWeights([w(0, 74), w(1, 85), w(2, 96)], T, { birthWeightG: 74 });
     expect(a.level).toBe('concern');
-    expect(a.reasons.join(' ')).toContain('unter 80 g');
+    expect(a.birthWeightContext?.phase).toBe('pending');
+    expect(a.reasons.join(' ')).toContain('Niedriges Geburtsgewicht');
+  });
+
+  it('stuft ein niedrig geborenes Kitten nach erreichtem Tag-2-Ziel auf Beobachten herunter', () => {
+    const a = analyzeWeights([w(0, 74), w(1, 84), w(2, 94)], T, {
+      birthWeightG: 74,
+      birthDate: '2026-03-03',
+    });
+    expect(a.level).toBe('watch');
+    expect(a.birthWeightContext?.phase).toBe('early-recovery');
+    expect(a.birthWeightContext?.gainPercent).toBeGreaterThanOrEqual(9.5);
+  });
+
+  it('entfernt den Geburtsgewichts-Marker nach erreichtem Tag-7-Aufholziel', () => {
+    const a = analyzeWeights([w(0, 74), w(2, 94), w(4, 108), w(7, 130)], T, {
+      birthWeightG: 74,
+      birthDate: '2026-03-03',
+    });
+    expect(a.level).toBe('ok');
+    expect(a.birthWeightContext?.phase).toBe('recovered');
+    expect(a.reasons.join(' ')).toContain('bis Tag 7 aufgeholt');
+  });
+
+  it('bleibt nach verfehltem Tag-7-Ziel auffällig, obwohl der aktuelle Trend gut ist', () => {
+    const a = analyzeWeights([w(0, 74), w(2, 85), w(4, 90), w(7, 114)], T, {
+      birthWeightG: 74,
+      birthDate: '2026-03-03',
+    });
+    expect(a.gainPerDay).toBeGreaterThanOrEqual(T.goodGainG);
+    expect(a.level).toBe('concern');
+    expect(a.birthWeightContext?.phase).toBe('pending');
+    expect(a.reasons.join(' ')).toContain('statt 58 %');
+  });
+
+  it('lässt eine spätere stabile Aufholung den Geburtsgewichts-Marker ebenfalls verschwinden', () => {
+    const a = analyzeWeights(
+      [w(0, 74), w(2, 85), w(7, 110), w(8, 119), w(10, 140)],
+      T,
+      { birthWeightG: 74, birthDate: '2026-03-03' },
+    );
+    expect(a.level).toBe('ok');
+    expect(a.birthWeightContext?.phase).toBe('late-recovery');
+    expect(a.reasons.join(' ')).toContain('stabile spätere Entwicklung');
   });
 
   it('markiert deutlichen Rückstand zum Wurfdurchschnitt', () => {

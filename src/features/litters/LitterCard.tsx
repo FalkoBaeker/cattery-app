@@ -26,6 +26,7 @@ export function RunningLitterCard({
   showWeights = true,
   onOpen,
   onWeigh,
+  onOpenWarnings,
 }: {
   litter: Litter;
   motherName: string;
@@ -37,6 +38,7 @@ export function RunningLitterCard({
   showWeights?: boolean;
   onOpen: () => void;
   onWeigh?: () => void;
+  onOpenWarnings?: () => void;
 }) {
   const nextState = nextTask ? dueState(nextTask, settings.schedule) : undefined;
   // Ab Woche 5 wird nicht mehr routinemäßig gewogen (F10) — dann steht hier
@@ -46,48 +48,60 @@ export function RunningLitterCard({
 
   return (
     <Card padded={false}>
-      <button
-        type="button"
-        onClick={onOpen}
-        className="flex w-full flex-col gap-2 p-4 text-left active:bg-surface-2"
-      >
-        <div className="flex items-start justify-between gap-3">
-          <span className="min-w-0 text-[1.05rem] font-semibold text-text">
-            {parentLine(motherName, fatherName)}
+      <div className="flex flex-col gap-2 p-4">
+        <button
+          type="button"
+          onClick={onOpen}
+          className="flex w-full flex-col gap-2 text-left"
+        >
+          <span className="flex items-start justify-between gap-3">
+            <span className="min-w-0 text-[1.05rem] font-semibold text-text">
+              {parentLine(motherName, fatherName)}
+            </span>
+            <LitterStatusBadge status={litter.status} />
           </span>
-          <LitterStatusBadge status={litter.status} />
-        </div>
 
-        <span className="text-[0.9rem] text-text-dim">
-          {litter.birthDate ? (
-            <>
-              {formatAge(litter.birthDate)} · geboren am {formatDate(litter.birthDate)}
-            </>
-          ) : (
-            'Geburtsdatum fehlt noch'
-          )}
-        </span>
+          <span className="text-[0.9rem] text-text-dim">
+            {litter.birthDate ? (
+              <>
+                {formatAge(litter.birthDate)} · geboren am {formatDate(litter.birthDate)}
+              </>
+            ) : (
+              'Geburtsdatum fehlt noch'
+            )}
+          </span>
 
-        <span className="text-[0.9rem] text-text">{summaryLine(summary)}</span>
+          <span className="text-[0.9rem] text-text">{summaryLine(summary)}</span>
+        </button>
 
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-2">
           {showWeights && weighing && (
             <Badge tone={weighing.tone} icon="scale">
               {weighing.text}
             </Badge>
           )}
-          {showWeights && warnings > 0 && (
-            <Badge tone="alert" icon="alert">
-              {/* „Kitten" hat keine eigene Mehrzahlform. */}
-              {warnings} Kitten auffällig
-            </Badge>
+          {showWeights && warnings > 0 && onOpenWarnings && (
+            <button
+              type="button"
+              onClick={onOpenWarnings}
+              aria-label={`${warnings} auffällige Kitten anzeigen`}
+              className="flex min-h-11 items-center gap-1 rounded-full px-1 active:bg-alert-soft"
+            >
+              <Badge tone="alert" icon="alert" className="text-[0.8rem]">
+                {/* „Kitten" hat keine eigene Mehrzahlform. */}
+                {warnings} Kitten auffällig
+              </Badge>
+              <Icon name="chevron-right" size={15} className="text-alert" />
+            </button>
           )}
         </div>
 
         {nextTask && (
-          <span
+          <button
+            type="button"
+            onClick={onOpen}
             className={[
-              'flex items-center gap-1.5 text-[0.88rem]',
+              'flex min-h-11 items-center gap-1.5 text-left text-[0.88rem]',
               nextState === 'overdue'
                 ? 'text-alert'
                 : nextState === 'today' || nextState === 'soon'
@@ -97,9 +111,9 @@ export function RunningLitterCard({
           >
             <Icon name="calendar" size={16} />
             {nextTask.title} · {formatRelativeDay(nextTask.dueDate)}
-          </span>
+          </button>
         )}
-      </button>
+      </div>
 
       <div
         className={[

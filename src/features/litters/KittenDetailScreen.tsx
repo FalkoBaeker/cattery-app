@@ -132,6 +132,8 @@ export function KittenDetailScreen() {
       birthWeightG: data.kitten.birthWeightG,
       litterAverageG: litterAverageWeight(byKitten, data.kitten.id),
       ageDays: birth ? Math.max(0, ageInDays(birth)) : undefined,
+      birthDate: birth,
+      birthAt: data.kitten.bornAt,
     });
   }, [data, settings]);
 
@@ -411,6 +413,20 @@ export function KittenDetailScreen() {
             </ul>
           </Callout>
         )}
+
+        {showWeights &&
+          analysis?.birthWeightContext &&
+          (analysis.birthWeightContext.phase === 'recovered' ||
+            analysis.birthWeightContext.phase === 'late-recovery') &&
+          level !== 'critical' &&
+          level !== 'concern' && (
+            <Callout tone="ok" icon="check-circle" title="Niedriges Geburtsgewicht aufgeholt">
+              <p>
+                Der niedrige Start bleibt dokumentiert, bestimmt die aktuelle Einstufung aber
+                nicht mehr. Jetzt zählt die weitere Gewichtsentwicklung.
+              </p>
+            </Callout>
+          )}
 
         {/* --- Stammdaten -------------------------------------------- */}
         <Section title="Stammdaten">

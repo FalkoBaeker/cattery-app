@@ -199,6 +199,8 @@ export interface KittenAnalysisInput {
   birthWeightG?: number;
   /** Geburtsdatum: aus `bornAt` des Kittens oder aus dem Wurf. */
   birthDate?: ISODate;
+  /** Genauer Geburtszeitpunkt, falls im Geburtsprotokoll erfasst. */
+  birthAt?: ISODateTime;
   thresholds: WeightThresholds;
 }
 
@@ -233,6 +235,8 @@ export function analyzeKitten(input: KittenAnalysisInput): KittenAnalysis {
     birthWeightG: input.birthWeightG,
     litterAverageG,
     ageDays,
+    birthDate: input.birthDate,
+    birthAt: input.birthAt,
   });
 
   return {

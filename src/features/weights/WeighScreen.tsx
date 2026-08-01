@@ -206,6 +206,7 @@ export function WeighScreen() {
           litterEntries: samplesByKitten,
           birthWeightG: k.birthWeightG,
           birthDate: k.bornAt ? dateOf(k.bornAt) : data.litter.birthDate,
+          birthAt: k.bornAt,
           thresholds: data.thresholds,
         }),
       ]),

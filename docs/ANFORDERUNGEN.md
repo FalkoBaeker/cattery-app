@@ -30,7 +30,7 @@ zusammenläuft — Gewicht, Tierarzt, Telefonat, Besuch, Notiz. Nichts geht verl
 | Zunahme in Ordnung | ab 6–7 g/Tag | F14 |
 | Zunahme kritisch | darunter | F15 |
 | Typisches Geburtsgewicht | 90 g | F17 |
-| Sorgenkind | unter **80 g** (absolut, nicht Prozent) | F18 |
+| Niedriges Geburtsgewicht | bis **86 g** bei Russisch Blau/Nebelung; einstellbar | F18 + rassespezifische Auswertung |
 
 - Unterscheidung der Kitten über die **Halsbandfarbe** (F21) — Rufnamen kommen
   erst später (F33). Die Halsbandfarbe ist die primäre Identität.
@@ -39,6 +39,9 @@ zusammenläuft — Gewicht, Tierarzt, Telefonat, Besuch, Notiz. Nichts geht verl
   Kalendertage.
 - Prozentuale Zunahme seit Geburt anzeigen (F20).
 - Warnungen **nur in der App**, keine Benachrichtigung (F22).
+- Niedriges Geburtsgewicht bleibt als Startkontext sichtbar, erzwingt aber
+  keine Dauerwarnung: Aufholziele sind +9,5 % bis Tag 2 und +58 % bis Tag 7.
+  Bei späterer stabiler Aufholung kann der Marker ebenfalls verschwinden.
 - Königin wird während der Trächtigkeit gewogen (F31), nach der Geburt nicht (F19).
 - **Kein Tierarzt-Ratschlag.** Auf F16 („wann würdest du zum Tierarzt?")
   antwortete sie: „Gar nicht, weil die nicht helfen." Die App zeigt Zahlen und
