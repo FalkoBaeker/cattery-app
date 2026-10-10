@@ -34,16 +34,16 @@ export function Screen({
   const onBack = typeof back === 'function' ? back : () => navigate(-1);
 
   return (
-    <div className="flex min-h-full flex-col">
-      <header className="sticky top-0 z-20 border-b border-border bg-bg/85 backdrop-blur-xl safe-top">
-        <div className="flex items-center gap-1 px-2 py-2">
+    <div className="app-screen flex min-h-full flex-col">
+      <header className="screen-header sticky top-0 z-20 border-b border-border bg-bg/85 backdrop-blur-xl safe-top">
+        <div className="screen-header-row flex min-h-15 items-center gap-1 px-2 py-2">
           {back ? (
             <IconButton icon="arrow-left" label="Zurück" size="sm" onClick={onBack} />
           ) : (
             <span className="w-1" />
           )}
           <div className="min-w-0 flex-1 px-1">
-            <h1 className="truncate text-[1.15rem] leading-tight font-semibold text-text">
+            <h1 className="screen-title truncate text-[1.15rem] leading-tight font-semibold text-text">
               {title}
             </h1>
             {subtitle && <p className="truncate text-[0.8rem] text-text-dim">{subtitle}</p>}
@@ -59,7 +59,7 @@ export function Screen({
           flush ? '' : 'px-4',
           'pt-4',
           // Platz für Tab-Leiste plus sicherer Bereich.
-          'pb-[calc(env(safe-area-inset-bottom)+5.5rem)]',
+          'pb-[calc(env(safe-area-inset-bottom)+7rem)]',
         ].join(' ')}
       >
         {children}

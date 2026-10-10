@@ -13,6 +13,7 @@ import {
   Badge,
   Button,
   EmptyState,
+  EventDateTimeField,
   List,
   ListRow,
   Sheet,
@@ -27,7 +28,7 @@ import {
   formatDateTime,
   fromLocalInputValue,
   toLocalInputValue,
-  todayISO,
+  nowISO,
 } from '../../lib/date';
 import { formatGainG, formatGainPerDay, formatGrams } from '../../lib/format';
 import { dayOfLife, deltaToPrevious, parseGrams } from './weighing';
@@ -175,8 +176,8 @@ export function EditWeightSheet({
       });
       toast.success('Messung geändert.');
       onClose();
-    } catch {
-      toast.error('Die Änderung konnte nicht gespeichert werden.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Die Änderung konnte nicht gespeichert werden.');
     }
   }
 
@@ -230,12 +231,12 @@ export function EditWeightSheet({
           inputMode="numeric"
           autoComplete="off"
         />
-        <TextInput
+        <EventDateTimeField
           label="Zeitpunkt"
-          type="datetime-local"
           value={at}
-          max={`${todayISO()}T23:59`}
-          onChange={(e) => setAt(e.target.value)}
+          min={birthDate ? `${birthDate}T00:00` : undefined}
+          max={toLocalInputValue(nowISO())}
+          onChange={setAt}
         />
         <TextInput
           label="Notiz"

@@ -7,6 +7,7 @@ import {
   Callout,
   ChoiceGrid,
   EmptyState,
+  EventDateTimeField,
   Icon,
   List,
   ListRow,
@@ -441,13 +442,11 @@ export function AppointmentDetailScreen() {
             {/* --- Wann ------------------------------------------- */}
             <Section title="Wann">
               <Stack gap="sm">
-                <TextInput
+                <EventDateTimeField
                   label="Datum und Uhrzeit"
-                  type="datetime-local"
                   value={toLocalInputValue(draft.startAt)}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    if (!v) return;
+                  onChange={(v) => {
+                    if (!v || !Number.isFinite(new Date(v).getTime())) return;
                     const iso = fromLocalInputValue(v);
                     if (Number.isFinite(new Date(iso).getTime())) set('startAt', iso);
                   }}

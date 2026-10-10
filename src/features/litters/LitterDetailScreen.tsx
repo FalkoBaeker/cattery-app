@@ -11,6 +11,7 @@ import {
   Callout,
   Card,
   EmptyState,
+  EventDateField,
   Icon,
   IconButton,
   List,
@@ -18,10 +19,12 @@ import {
   Screen,
   Section,
   Stack,
+  useConfirm,
+  useToast,
 } from '../../ui';
 import { LITTER_STATUS_LABEL, SEX_LABEL, kittenLabel } from '../../types';
 import type { ID, ISODate, Kitten } from '../../types';
-import { db } from '../../db/db';
+import { db, patch } from '../../db/db';
 import { checkLitterPause } from '../../domain/schedule';
 import { WEIGHT_LEVEL_TONE, type WeightAnalysis } from '../../domain/weight';
 import { dateOf, formatAge, formatDate, todayISO } from '../../lib/date';
@@ -42,15 +45,22 @@ import { ScheduleSection } from './ScheduleSection';
 import { LitterEditorSheet } from './LitterEditorSheet';
 import { KittenEditorSheet } from './KittenEditorSheet';
 import { BirthLogSheet } from './BirthLogSheet';
+import { CareTaskSheet } from './CareTaskSheet';
+import { canSuggestCompletion, setLitterBirthDate } from './lifecycle';
 
 export function LitterDetailScreen() {
   const { litterId } = useParams<{ litterId: string }>();
   const navigate = useNavigate();
   const settings = useSettings();
+  const toast = useToast();
+  const confirm = useConfirm();
 
   const [editSheet, setEditSheet] = useState(false);
   const [kittenSheet, setKittenSheet] = useState(false);
   const [birthSheet, setBirthSheet] = useState(false);
+  const [careSheet, setCareSheet] = useState(false);
+  const [birthDateDraft, setBirthDateDraft] = useState('');
+  const [birthSaving, setBirthSaving] = useState(false);
 
   const data = useLiveQuery(async () => {
     if (!litterId) return { missing: true } as const;
@@ -172,6 +182,25 @@ export function LitterDetailScreen() {
       }
     >
       <Stack gap="lg">
+        {kittens.length > 0 && !litter.birthDate && <Callout tone="warn" icon="calendar" title="Geburtsdatum ergänzen">
+          <div className="mt-2 flex flex-col gap-3">
+            <EventDateField label="Tatsächliches Geburtsdatum" value={birthDateDraft} onChange={setBirthDateDraft} max={todayISO()} required />
+            <Button icon="check" variant="primary" loading={birthSaving} onClick={async () => {
+              setBirthSaving(true);
+              try { await setLitterBirthDate(litter, birthDateDraft, settings); toast.success('Geburtsdatum gespeichert.'); }
+              catch (error) { toast.error(error instanceof Error ? error.message : 'Speichern fehlgeschlagen.'); }
+              finally { setBirthSaving(false); }
+            }}>Geburtsdatum speichern</Button>
+          </div>
+        </Callout>}
+        {litter.status === 'born' && canSuggestCompletion(kittens, interests) && <Callout tone="accent" icon="check-circle" title="Wurf abschließen?">
+          <p>Alle Kitten sind abgeholt, bleiben bei dir oder sind abschließend dokumentiert.</p>
+          <Button className="mt-3" icon="check" onClick={async () => {
+            if (!await confirm({ title: 'Wurf abschließen?', message: 'Der Wurf erscheint anschließend im Archiv. Seine Einträge bleiben verfügbar.', confirmLabel: 'Abschließen' })) return;
+            try { await patch(db.litters, litter.id, { status: 'completed' }); toast.success('Wurf abgeschlossen.'); }
+            catch { toast.error('Der Wurf konnte nicht abgeschlossen werden.'); }
+          }}>Wurf abschließen</Button>
+        </Callout>}
         {/* --- Kopfdaten -------------------------------------------- */}
         <Card>
           <div className="mb-2 flex items-center justify-between gap-2">
@@ -230,6 +259,7 @@ export function LitterDetailScreen() {
 
         {/* --- Schnellzugriffe -------------------------------------- */}
         <div className="grid grid-cols-1 gap-2">
+          <Button icon="plus" onClick={() => setCareSheet(true)}>Ereignis eintragen</Button>
           <Button
             size="lg"
             block
@@ -356,6 +386,7 @@ export function LitterDetailScreen() {
       </Stack>
 
       {/* --- Blätter ------------------------------------------------ */}
+      {careSheet && <CareTaskSheet litter={litter} kittens={kittens} onClose={() => setCareSheet(false)} />}
       <LitterEditorSheet
         open={editSheet}
         onClose={() => setEditSheet(false)}

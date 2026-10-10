@@ -597,6 +597,7 @@ describe('suggestCollarColor', () => {
       'turquoise',
       'white',
       'black',
+      'gray',
       'beige',
       'brown',
     ] as const;

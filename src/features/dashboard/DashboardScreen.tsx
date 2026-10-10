@@ -23,6 +23,7 @@ import {
   Stack,
 } from '../../ui';
 import { db } from '../../db/db';
+import { BrandImage } from '../../ui/BrandImage';
 import { useSettings } from '../settings/useSettings';
 import { InstallSheet, useInstallHint } from '../settings/install';
 import { buildDashboard, type DashboardModel } from './dashboard';
@@ -441,9 +442,7 @@ function AppointmentRow({
 function AllClear() {
   return (
     <Card className="flex flex-col items-center gap-2 py-8 text-center">
-      <span className="flex size-12 items-center justify-center rounded-full bg-ok-soft text-ok">
-        <Icon name="check-circle" size={26} />
-      </span>
+      <BrandImage name="today" className="empty-art size-24" />
       <p className="font-medium text-text">Für heute ist alles erledigt.</p>
       <p className="max-w-xs text-sm leading-relaxed text-text-dim">
         Sobald etwas ansteht — wiegen, ein Termin, ein Fahrplan-Punkt — steht es hier.
@@ -468,13 +467,14 @@ function FirstRun({
 }) {
   return (
     <Stack gap="lg">
-      <Card>
-        <h2 className="text-[1.05rem] font-semibold text-text">Willkommen</h2>
-        <p className="mt-1.5 text-[0.92rem] leading-relaxed text-text-dim">
+      <section className="flex flex-col items-center px-3 pt-1 text-center">
+        <BrandImage name="cat-family" className="empty-art mb-2 size-36" />
+        <h2 className="text-[1.2rem] font-semibold text-text">Willkommen</h2>
+        <p className="mt-1.5 max-w-md text-[0.92rem] leading-relaxed text-text-dim">
           Die App startet leer. Alles Weitere entsteht mit der Zeit — Wurf für Wurf.
           Das sind die ersten sinnvollen Schritte:
         </p>
-      </Card>
+      </section>
 
       <List>
         {showCats && (

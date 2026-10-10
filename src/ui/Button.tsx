@@ -6,19 +6,19 @@ type Size = 'sm' | 'md' | 'lg';
 
 const VARIANTS: Record<Variant, string> = {
   primary:
-    'bg-accent text-on-accent border-transparent active:brightness-95 disabled:bg-surface-3 disabled:text-text-faint',
+    'ui-button-primary bg-accent text-on-accent active:brightness-95 disabled:bg-surface-3 disabled:text-text-faint',
   secondary:
-    'bg-surface text-text border-border active:bg-surface-2 disabled:text-text-faint',
-  ghost: 'bg-transparent text-accent border-transparent active:bg-accent-soft',
+    'ui-button-secondary bg-surface text-text border-border active:bg-surface-2 disabled:text-text-faint',
+  ghost: 'ui-button-ghost bg-transparent text-accent border-transparent active:bg-accent-soft',
   danger: 'bg-alert text-white border-transparent active:brightness-95',
-  quiet: 'bg-surface-2 text-text border-transparent active:bg-surface-3',
+  quiet: 'ui-button-quiet bg-surface-2 text-text active:bg-surface-3',
 };
 
 const SIZES: Record<Size, string> = {
   // Mindestens 44 px hoch — Apples Vorgabe für sicher treffbare Ziele.
   sm: 'min-h-11 px-3 text-[0.9rem] gap-1.5 rounded-lg',
-  md: 'min-h-11 px-4 text-[0.95rem] gap-2 rounded-xl',
-  lg: 'min-h-13 px-5 text-base gap-2 rounded-xl',
+  md: 'min-h-11 px-4 text-[0.95rem] gap-2 rounded-lg',
+  lg: 'min-h-13 px-5 text-base gap-2 rounded-lg',
 };
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -50,8 +50,7 @@ export function Button({
       disabled={disabled || loading}
       aria-busy={loading || undefined}
       className={[
-        'inline-flex items-center justify-center border font-medium',
-        'transition-[background-color,filter] duration-100 select-none',
+        'ui-button inline-flex items-center justify-center border font-medium select-none',
         'disabled:opacity-60 disabled:pointer-events-none',
         VARIANTS[variant],
         SIZES[size],
@@ -78,7 +77,7 @@ export interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement>
   size?: Size;
 }
 
-/** Runder Knopf, der nur ein Symbol zeigt. `label` ist Pflicht (Screenreader). */
+/** Symbolknopf. `label` ist Pflicht (Screenreader und Tooltip). */
 export function IconButton({
   icon,
   label,
@@ -95,8 +94,7 @@ export function IconButton({
       aria-label={label}
       title={label}
       className={[
-        'inline-flex items-center justify-center rounded-full border',
-        'transition-[background-color] duration-100 select-none',
+        'ui-button inline-flex shrink-0 items-center justify-center rounded-lg border select-none',
         'disabled:opacity-40 disabled:pointer-events-none',
         VARIANTS[variant],
         box,
@@ -132,8 +130,8 @@ export function Spinner({ size = 18 }: { size?: number }) {
 }
 
 /**
- * Schwebender Aktionsknopf unten rechts. Berücksichtigt die Tab-Leiste
- * und den unteren sicheren Bereich.
+ * Dauerhafte Hauptaktion rechts in der Kopfzeile. Screen reserviert
+ * dort Platz, damit die Aktion keine Inhalte oder anderen Knöpfe verdeckt.
  */
 export function Fab({
   icon = 'plus',
@@ -149,8 +147,9 @@ export function Fab({
       type="button"
       onClick={onClick}
       aria-label={label}
-      className="fixed right-4 z-30 flex size-14 items-center justify-center rounded-full bg-accent text-on-accent shadow-raised active:brightness-95"
-      style={{ bottom: 'calc(env(safe-area-inset-bottom) + 4.75rem)' }}
+      title={label}
+      className="screen-fab ui-button ui-button-primary fixed right-3 z-30 flex size-11 items-center justify-center rounded-xl border bg-accent text-on-accent active:brightness-95"
+      style={{ top: 'calc(env(safe-area-inset-top) + 0.5rem)' }}
     >
       <Icon name={icon} size={26} strokeWidth={2} />
     </button>

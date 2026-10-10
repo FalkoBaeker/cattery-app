@@ -31,3 +31,4 @@ export {
 export { Sheet, ConfirmProvider, useConfirm, useFocusTrap } from './Sheet';
 export { ToastProvider, useToast } from './Toast';
 export { Screen, Stack } from './Screen';
+export { EventDateField, EventDateTimeField } from './EventDateField';

@@ -1,6 +1,7 @@
 import { initials } from '../../lib/format';
 import { useAttachmentUrl } from './hooks';
 import type { ID } from '../../types';
+import { BrandImage } from '../../ui/BrandImage';
 
 /**
  * Bild der Katze — oder, solange keines da ist, ihre Initialen.
@@ -20,7 +21,7 @@ export function CatAvatar({
 
   return (
     <span
-      className="inline-flex shrink-0 items-center justify-center overflow-hidden rounded-[28%] border border-border bg-surface-2 font-semibold text-text-dim"
+      className="pearl-panel relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-[28%] border border-border bg-surface-2 font-semibold text-text-dim"
       style={{ width: size, height: size, fontSize: Math.max(12, Math.round(size * 0.36)) }}
     >
       {url ? (
@@ -31,7 +32,10 @@ export function CatAvatar({
           draggable={false}
         />
       ) : (
-        <span aria-hidden="true">{initials(name) || '?'}</span>
+        <>
+          <BrandImage name="breeding" className="size-[88%]" />
+          <span aria-hidden="true" className="absolute right-0 bottom-0 flex min-w-4 items-center justify-center rounded-tl-md bg-surface/95 px-0.5 text-[0.6rem] leading-4 font-semibold text-accent">{initials(name) || '?'}</span>
+        </>
       )}
     </span>
   );

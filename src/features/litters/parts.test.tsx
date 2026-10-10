@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { DateInput } from './parts';
+import { CollarPicker, DateInput } from './parts';
 
 describe('DateInput', () => {
   it('verknüpft die sichtbare Beschriftung mit dem Datumsfeld', () => {
@@ -23,5 +23,17 @@ describe('DateInput', () => {
       target: { value: '' },
     });
     expect(onChange).toHaveBeenCalledWith(undefined);
+  });
+});
+
+describe('CollarPicker', () => {
+  it('bietet Grau als eigenständige Halsbandfarbe an', () => {
+    const onChange = vi.fn();
+    render(<CollarPicker value="red" onChange={onChange} />);
+    const gray = screen.getByRole('radio', { name: 'Grau' });
+    expect(gray).toHaveAttribute('aria-checked', 'false');
+    fireEvent.click(gray);
+    expect(onChange).toHaveBeenCalledWith('gray');
+    expect(screen.getByRole('radio', { name: 'ohne' })).toBeInTheDocument();
   });
 });

@@ -3,6 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import {
   Button,
   Callout,
+  EventDateField,
   ChoiceGrid,
   NumberInput,
   Sheet,
@@ -206,14 +207,13 @@ export function HealthTestSheet({
             />
           )}
 
-          <TextInput
+          <EventDateField
             label="Datum"
             required
-            type="date"
             value={date}
             error={dateError}
-            onChange={(e) => {
-              setDate(e.target.value);
+            onChange={(value) => {
+              setDate(value);
               if (dateError) setDateError(undefined);
             }}
           />

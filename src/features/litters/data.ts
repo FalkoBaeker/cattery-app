@@ -52,7 +52,7 @@ export async function ensureLitterBorn(
   const pad = (n: number) => String(n).padStart(2, '0');
   const birthDate =
     litter.birthDate ?? `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  await patch(db.litters, litterId, { birthDate, status: 'born' });
+  await patch(db.litters, litterId, { birthDate, status: litter.status === 'completed' ? 'completed' : 'born' });
   await syncLitterSchedule(litterId, settings);
 }
 
@@ -84,30 +84,34 @@ export const BIRTH_WEIGHT_NOTE = 'Geburtsgewicht';
  * Messung.
  */
 export async function addKitten(input: NewKittenInput, settings: Settings): Promise<Kitten> {
-  const stillborn = input.stillborn ?? false;
-  const kitten = await insert<Kitten>(db.kittens, {
-    litterId: input.litterId,
-    collarColor: input.collarColor,
-    callName: input.callName?.trim() || undefined,
-    sex: input.sex ?? 'unknown',
-    birthWeightG: input.birthWeightG,
-    bornAt: input.bornAt,
-    stillborn,
-    saleStatus: input.saleStatus ?? (stillborn ? 'deceased' : 'available'),
-    notes: input.notes?.trim() || undefined,
-  });
-
-  if (!stillborn && input.birthWeightG && input.birthWeightG > 0 && input.bornAt) {
-    await insertPlain(db.weights, {
-      kittenId: kitten.id,
-      at: input.bornAt,
-      grams: Math.round(input.birthWeightG),
-      note: BIRTH_WEIGHT_NOTE,
+  if (input.bornAt && (!Number.isFinite(new Date(input.bornAt).getTime()) || new Date(input.bornAt).getTime() > Date.now())) throw new Error('Bitte einen gültigen Geburtszeitpunkt bis jetzt wählen.');
+  return db.transaction('rw', db.kittens, db.weights, db.litters, db.careTasks, async () => {
+    if (input.bornAt) await ensureLitterBorn(input.litterId, input.bornAt, settings);
+    const stillborn = input.stillborn ?? false;
+    const kitten = await insert<Kitten>(db.kittens, {
+      litterId: input.litterId,
+      collarColor: input.collarColor,
+      callName: input.callName?.trim() || undefined,
+      sex: input.sex ?? 'unknown',
+      birthWeightG: input.birthWeightG,
+      bornAt: input.bornAt,
+      stillborn,
+      saleStatus: input.saleStatus ?? (stillborn ? 'deceased' : 'available'),
+      notes: input.notes?.trim() || undefined,
     });
-  }
 
-  await syncLitterSchedule(input.litterId, settings);
-  return kitten;
+    if (!stillborn && input.birthWeightG && input.birthWeightG > 0 && input.bornAt) {
+      await insertPlain(db.weights, {
+        kittenId: kitten.id,
+        at: input.bornAt,
+        grams: Math.round(input.birthWeightG),
+        note: BIRTH_WEIGHT_NOTE,
+      });
+    }
+
+    await syncLitterSchedule(input.litterId, settings);
+    return kitten;
+  });
 }
 
 /**
@@ -122,6 +126,7 @@ export async function addKitten(input: NewKittenInput, settings: Settings): Prom
 export async function syncBirthWeightEntry(
   kitten: Pick<Kitten, 'id' | 'bornAt' | 'stillborn'>,
   birthWeightG?: number,
+  previousBornAt?: ISODateTime,
 ): Promise<void> {
   const grams =
     birthWeightG != null && Number.isFinite(birthWeightG) && birthWeightG > 0
@@ -129,11 +134,14 @@ export async function syncBirthWeightEntry(
       : undefined;
 
   const entries = await db.weights.where('kittenId').equals(kitten.id).toArray();
-  const existing = entries.find((w) => w.note === BIRTH_WEIGHT_NOTE);
+  const existing = entries.find((w) => w.note === BIRTH_WEIGHT_NOTE) ??
+    entries.find((w) => !w.note && w.at === (previousBornAt ?? kitten.bornAt));
 
   if (existing) {
     if (grams == null) await deleteWeight(existing.id);
-    else if (existing.grams !== grams) await updateWeight(existing.id, { grams });
+    else if (existing.grams !== grams || existing.note !== BIRTH_WEIGHT_NOTE || (kitten.bornAt && kitten.bornAt !== existing.at)) {
+      await updateWeight(existing.id, { grams, at: kitten.bornAt ?? existing.at, note: BIRTH_WEIGHT_NOTE });
+    }
     return;
   }
 
@@ -252,6 +260,11 @@ export async function revokeKittenDeath(kitten: Kitten, settings: Settings): Pro
 async function clearKittenReferences(kittenIds: ID[]): Promise<void> {
   if (kittenIds.length === 0) return;
   const ids = new Set(kittenIds);
+  const careTasks = (await db.careTasks.toArray()).filter((task) => task.completedKittenDates && kittenIds.some((id) => id in task.completedKittenDates!));
+  for (const task of careTasks) {
+    const completedKittenDates = Object.fromEntries(Object.entries(task.completedKittenDates!).filter(([id]) => !ids.has(id)));
+    await patch(db.careTasks, task.id, { completedKittenDates });
+  }
 
   const interests = (await db.interests.toArray()).filter((interest) =>
     interestKittenIds(interest).some((id) => ids.has(id)),

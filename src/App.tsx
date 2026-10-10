@@ -7,6 +7,7 @@ import {
   getSettings,
   requestPersistentStorage,
 } from './db/db';
+import { reconcileLitterBirths } from './features/litters/lifecycle';
 
 /** Setzt das Farbschema aus den Einstellungen auf das Wurzelelement. */
 function useTheme() {
@@ -40,6 +41,9 @@ function AppContent() {
     // hinterlassen. Nur mindestens eine Stunde alte Waisen werden entfernt.
     void cleanupOrphanAttachments().catch(() => {
       toast.error('Die automatische Speicherbereinigung ist fehlgeschlagen.');
+    });
+    void getSettings().then(reconcileLitterBirths).catch(() => {
+      toast.error('Der Geburtsstatus konnte nicht abgeglichen werden.');
     });
   }, [toast]);
 

@@ -92,3 +92,46 @@ describe('ZuchtScreen – Gewichtsauffälligkeiten', () => {
     expect(within(dialog).getByRole('button', { name: 'Alle Kitten im Wurf' })).toBeInTheDocument();
   });
 });
+
+describe('ZuchtScreen – Archiv', () => {
+  it('keeps the archive accessible even when the database is empty', async () => {
+    await db.settings.put(DEFAULT_SETTINGS);
+    render(
+      <ToastProvider>
+        <ConfirmProvider>
+          <MemoryRouter initialEntries={['/zucht']}>
+            <ZuchtScreen />
+          </MemoryRouter>
+        </ConfirmProvider>
+      </ToastProvider>,
+    );
+
+    const current = await screen.findByRole('radio', { name: 'Aktuell' });
+    expect(current).toBeChecked();
+    await userEvent.click(screen.getByRole('radio', { name: 'Archiv' }));
+    expect(screen.getByText('Noch keine archivierten Würfe')).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: 'Aktuell' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('radio', { name: 'Aktuell' }));
+    expect(screen.getByText('Hier beginnt alles')).toBeInTheDocument();
+  });
+
+  it('respects the disabled litters module', async () => {
+    await db.settings.put({
+      ...DEFAULT_SETTINGS,
+      modules: { ...DEFAULT_SETTINGS.modules, litters: false },
+    });
+    render(
+      <ToastProvider>
+        <ConfirmProvider>
+          <MemoryRouter initialEntries={['/zucht']}>
+            <ZuchtScreen />
+          </MemoryRouter>
+        </ConfirmProvider>
+      </ToastProvider>,
+    );
+
+    await screen.findByText('Hier beginnt alles');
+    expect(screen.queryByRole('radio', { name: 'Archiv' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Katze anlegen' })).toBeInTheDocument();
+  });
+});

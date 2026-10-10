@@ -7,8 +7,8 @@
  */
 
 import { db, insert, patch } from '../../db/db';
-import { nowISO, todayISO } from '../../lib/date';
-import type { BreedingUse, BreedingUseStage, Contract, ID, ISODate } from '../../types';
+import { dateOf, nowISO, parseISODate, todayISO, toISODate } from '../../lib/date';
+import type { BreedingUse, BreedingUseStage, Contract, ID, ISODate, ISODateTime } from '../../types';
 import { BREEDING_USE_STAGE_ORDER } from '../../types';
 import {
   fristende,
@@ -72,6 +72,17 @@ export function deadlineVon(
 /* ------------------------------------------------------------------ */
 /*  Schreiben                                                          */
 /* ------------------------------------------------------------------ */
+
+function ereignisZeitpunkt(at: ISODateTime): ISODateTime {
+  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/.exec(at);
+  const time = new Date(at).getTime();
+  if (!match || !Number.isFinite(time) || toISODate(parseISODate(match[1])) !== match[1] ||
+    Number(match[2]) > 23 || Number(match[3]) > 59 || Number(match[4] ?? 0) > 59) {
+    throw new Error('Bitte einen gültigen Ereigniszeitpunkt eintragen.');
+  }
+  if (time > Date.now()) throw new Error('Das Ereignis darf nicht in der Zukunft liegen.');
+  return new Date(at).toISOString();
+}
 
 /** Der Vorgang, der zu einem Vertrag gehört — falls es ihn schon gibt. */
 export async function vorgangZuVertrag(contractId: ID): Promise<BreedingUse | undefined> {
@@ -145,33 +156,64 @@ export async function stufeSetzen(
   use: BreedingUse,
   stage: BreedingUseStage,
   note?: string,
+  at: ISODateTime = nowISO(),
 ): Promise<void> {
+  const eventAt = ereignisZeitpunkt(at);
   await patch(db.breedingUses, use.id, {
     stage,
-    history: [...use.history, { stage, at: nowISO(), note }],
+    history: [...use.history, { stage, at: eventAt, note }],
   });
 }
 
 /** Verlängert die Frist einmalig um die vereinbarten Monate. */
-export async function fristVerlaengern(use: BreedingUse): Promise<void> {
+export async function fristVerlaengern(use: BreedingUse, at: ISODateTime = nowISO()): Promise<void> {
   if (use.extendedAt) return;
+  const eventAt = ereignisZeitpunkt(at);
   const neu = fristende(use.startDate, use.months, use.extensionMonths, true);
   await patch(db.breedingUses, use.id, {
-    extendedAt: todayISO(),
+    extendedAt: dateOf(eventAt),
     deadlineDate: neu,
     history: [
       ...use.history,
       {
         stage: use.stage,
-        at: nowISO(),
+        at: eventAt,
         note: `Frist um ${use.extensionMonths} Monate verlängert`,
       },
     ],
   });
 }
 
+export async function verlaufsnotizHinzufuegen(
+  use: BreedingUse,
+  note: string,
+  at: ISODateTime = nowISO(),
+): Promise<void> {
+  const eventAt = ereignisZeitpunkt(at);
+  await patch(db.breedingUses, use.id, {
+    history: [...use.history, { stage: use.stage, at: eventAt, note }],
+  });
+}
+
+/** Die gespeicherte Reihenfolge beschreibt Statuswechsel; Datumskorrekturen ändern nur die Zeit. */
+export async function verlaufDatumSetzen(use: BreedingUse, index: number, at: ISODateTime): Promise<void> {
+  const eventAt = ereignisZeitpunkt(at);
+  const entry = use.history[index];
+  if (!entry) throw new Error('Dieser Verlaufseintrag ist nicht mehr vorhanden.');
+  const history = use.history.map((item, i) => i === index ? { ...item, at: eventAt } : item);
+  const isExtension = Boolean(use.extendedAt) && dateOf(entry.at) === use.extendedAt &&
+    entry.note === `Frist um ${use.extensionMonths} Monate verlängert`;
+  await patch(db.breedingUses, use.id, {
+    history,
+    ...(isExtension ? { extendedAt: dateOf(eventAt) } : {}),
+  });
+}
+
 /** Ändert das Datum der erstmaligen Überlassung und rechnet die Frist neu. */
 export async function fristbeginnSetzen(use: BreedingUse, startDate: ISODate): Promise<void> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || toISODate(parseISODate(startDate)) !== startDate || startDate > todayISO()) {
+    throw new Error('Bitte ein gültiges Überlassungsdatum bis heute eintragen.');
+  }
   await patch(db.breedingUses, use.id, {
     startDate,
     deadlineDate: fristende(startDate, use.months, use.extensionMonths, Boolean(use.extendedAt)),

@@ -6,22 +6,21 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
-  Badge,
   Button,
   Callout,
   EmptyState,
   Fab,
-  Icon,
   List,
   ListRow,
   Screen,
   Section,
+  Segmented,
   Sheet,
   Stack,
 } from '../../ui';
 import { kittenLabel, type Cat, type ID, type Litter } from '../../types';
 import { db } from '../../db/db';
-import { formatDate, todayISO } from '../../lib/date';
+import { todayISO } from '../../lib/date';
 import { formatGainPerDay, formatGrams } from '../../lib/format';
 import { CatEditorSheet, CatRow } from '../cats';
 import {
@@ -35,10 +34,10 @@ import { useSettings } from './hooks';
 import { CollarDot, Loading, WeightLevelBadge } from './parts';
 import { PlannedLitterCard, RunningLitterCard } from './LitterCard';
 import { LitterEditorSheet } from './LitterEditorSheet';
+import { LitterArchive } from './LitterArchive';
 
 const RUNNING: Litter['status'][] = ['born'];
 const EXPECTED: Litter['status'][] = ['planned', 'mated', 'pregnant'];
-const CLOSED: Litter['status'][] = ['completed', 'cancelled'];
 
 export function ZuchtScreen() {
   const navigate = useNavigate();
@@ -47,7 +46,7 @@ export function ZuchtScreen() {
   const [createSheet, setCreateSheet] = useState(false);
   const [litterSheet, setLitterSheet] = useState(false);
   const [catSheet, setCatSheet] = useState(false);
-  const [showClosed, setShowClosed] = useState(false);
+  const [view, setView] = useState<'current' | 'archive'>('current');
   const [warningLitterId, setWarningLitterId] = useState<ID | null>(null);
 
   const data = useLiveQuery(async () => {
@@ -123,14 +122,6 @@ export function ZuchtScreen() {
       .sort((a, b) => key(a).localeCompare(key(b)));
   }, [data?.litters, settings?.gestationDays]);
 
-  const closed = useMemo(
-    () =>
-      (data?.litters ?? [])
-        .filter((l) => CLOSED.includes(l.status))
-        .sort((a, b) => (b.birthDate ?? '').localeCompare(a.birthDate ?? '')),
-    [data?.litters],
-  );
-
   const warningSelection = running.find(({ litter }) => litter.id === warningLitterId);
 
   const queens = useMemo(
@@ -188,7 +179,26 @@ export function ZuchtScreen() {
 
   return (
     <Screen title="Zucht">
-      {nothingAtAll ? (
+      {showLitters && (
+        <Segmented
+          className="mb-5"
+          label="Zuchtansicht"
+          value={view}
+          onChange={setView}
+          options={[
+            { value: 'current', label: 'Aktuell' },
+            { value: 'archive', label: 'Archiv' },
+          ]}
+        />
+      )}
+      {showLitters && view === 'archive' ? (
+        <LitterArchive
+          litters={data.litters}
+          cats={data.cats}
+          kittens={data.kittens}
+          onOpen={(id) => navigate(`/zucht/wurf/${id}`)}
+        />
+      ) : nothingAtAll ? (
         <EmptyState
           icon="cat"
           title="Hier beginnt alles"
@@ -310,48 +320,6 @@ export function ZuchtScreen() {
             )}
           </Section>}
 
-          {/* --- Abgeschlossene Würfe ------------------------------- */}
-          {showLitters && closed.length > 0 && (
-            <Section title="Abgeschlossen">
-              <div className="flex flex-col gap-2">
-                <Button
-                  block
-                  iconRight={showClosed ? 'chevron-up' : 'chevron-down'}
-                  onClick={() => setShowClosed((v) => !v)}
-                >
-                  {showClosed
-                    ? 'Ausblenden'
-                    : `${closed.length} ${closed.length === 1 ? 'Wurf' : 'Würfe'} anzeigen`}
-                </Button>
-                {showClosed && (
-                  <List>
-                    {closed.map((litter) => (
-                      <ListRow
-                        key={litter.id}
-                        leading={<Icon name="paw" size={20} className="text-text-faint" />}
-                        title={
-                          fatherOf(litter)
-                            ? `${nameOf(litter.motherId) ?? 'Unbekannt'} × ${fatherOf(litter)}`
-                            : (nameOf(litter.motherId) ?? 'Unbekannt')
-                        }
-                        subtitle={
-                          litter.birthDate
-                            ? `geboren am ${formatDate(litter.birthDate)}`
-                            : 'ohne Geburtsdatum'
-                        }
-                        trailing={
-                          <Badge tone="neutral">
-                            {litter.status === 'cancelled' ? 'Abgebrochen' : 'Abgeschlossen'}
-                          </Badge>
-                        }
-                        onClick={() => navigate(`/zucht/wurf/${litter.id}`)}
-                      />
-                    ))}
-                  </List>
-                )}
-              </div>
-            </Section>
-          )}
         </Stack>
       )}
 

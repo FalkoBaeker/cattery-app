@@ -19,6 +19,7 @@ import {
   Callout,
   Card,
   EmptyState,
+  EventDateTimeField,
   Icon,
   IconButton,
   List,
@@ -29,7 +30,6 @@ import {
   Sheet,
   Stack,
   TextArea,
-  TextInput,
   useConfirm,
   useToast,
   type IconName,
@@ -56,6 +56,7 @@ import {
   fromLocalInputValue,
   nowISO,
   toLocalInputValue,
+  todayISO,
 } from '../../lib/date';
 import { formatMoney } from '../../lib/format';
 import { buildMailtoUrl, buildTelUrl, buildWhatsAppUrl, formatPurgeHint } from './order';
@@ -109,11 +110,20 @@ function QuickAction({
 /*  Kontaktverlauf                                                     */
 /* ================================================================== */
 
+function contactDateError(value: string): string | undefined {
+  const time = new Date(value).getTime();
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value) || !Number.isFinite(time) ||
+    toLocalInputValue(new Date(time).toISOString()) !== value) {
+    return 'Bitte Datum und Uhrzeit eintragen.';
+  }
+  return time > Date.now() ? 'Der Kontakt darf nicht in der Zukunft liegen.' : undefined;
+}
+
 function ContactComposer({ interestId }: { interestId: ID }) {
   const toast = useToast();
   const [channel, setChannel] = useState<ContactChannel>('call');
   const [text, setText] = useState('');
-  const [at, setAt] = useState<string>(() => nowISO());
+  const [at, setAt] = useState<string>(() => toLocalInputValue(nowISO()));
   // Solange die Nutzerin den Zeitpunkt nicht selbst anfasst, gilt beim
   // Speichern „jetzt" — der beim Einhängen gemerkte Wert wäre nach einem
   // stundenlang offenen Bildschirm längst veraltet.
@@ -124,11 +134,12 @@ function ContactComposer({ interestId }: { interestId: ID }) {
   async function save() {
     const clean = text.trim();
     if (!clean) return;
+    if (atEdited && contactDateError(at)) return;
     setSaving(true);
     try {
-      await addContactNote(interestId, channel, clean, atEdited ? at : nowISO());
+      await addContactNote(interestId, channel, clean, atEdited ? fromLocalInputValue(at) : nowISO());
       setText('');
-      setAt(nowISO());
+      setAt(toLocalInputValue(nowISO()));
       setAtEdited(false);
       setShowDate(false);
       toast.success('Im Verlauf festgehalten');
@@ -158,15 +169,14 @@ function ContactComposer({ interestId }: { interestId: ID }) {
       />
 
       {showDate ? (
-        <TextInput
+        <EventDateTimeField
           label="Zeitpunkt"
-          type="datetime-local"
-          value={toLocalInputValue(at)}
-          onChange={(e) => {
-            if (e.target.value) {
-              setAt(fromLocalInputValue(e.target.value));
-              setAtEdited(true);
-            }
+          value={at}
+          max={todayISO()}
+          error={contactDateError(at)}
+          onChange={(value) => {
+            setAt(value);
+            setAtEdited(true);
           }}
         />
       ) : (
@@ -175,13 +185,13 @@ function ContactComposer({ interestId }: { interestId: ID }) {
           onClick={() => {
             // Beim Aufklappen mit der aktuellen Zeit starten — nicht mit dem
             // Wert vom Einhängen des Bildschirms.
-            if (!atEdited) setAt(nowISO());
+            if (!atEdited) setAt(toLocalInputValue(nowISO()));
             setShowDate(true);
           }}
           className="flex min-h-11 items-center gap-1.5 self-start px-1 text-[0.85rem] text-text-dim active:text-text"
         >
           <Icon name="clock" size={16} />
-          {atEdited ? formatDateTime(at) : 'jetzt'}
+          {atEdited && !contactDateError(at) ? formatDateTime(fromLocalInputValue(at)) : 'jetzt'}
           <span className="text-accent">ändern</span>
         </button>
       )}
@@ -204,20 +214,20 @@ function ContactNoteSheet({
   const confirm = useConfirm();
   const [channel, setChannel] = useState<ContactChannel>('call');
   const [text, setText] = useState('');
-  const [at, setAt] = useState(nowISO());
+  const [at, setAt] = useState(() => toLocalInputValue(nowISO()));
 
   useEffect(() => {
     if (note) {
       setChannel(note.channel);
       setText(note.text);
-      setAt(note.at);
+      setAt(toLocalInputValue(note.at));
     }
   }, [note]);
 
   async function save() {
-    if (!note) return;
+    if (!note || contactDateError(at)) return;
     try {
-      await updateContactNote(note.id, { channel, text: text.trim(), at });
+      await updateContactNote(note.id, { channel, text: text.trim(), at: fromLocalInputValue(at) });
     } catch {
       toast.error('Die Änderung ließ sich nicht speichern.');
       return;
@@ -276,13 +286,12 @@ function ContactNoteSheet({
           value={text}
           onChange={(e) => setText(e.target.value)}
         />
-        <TextInput
+        <EventDateTimeField
           label="Zeitpunkt"
-          type="datetime-local"
-          value={toLocalInputValue(at)}
-          onChange={(e) => {
-            if (e.target.value) setAt(fromLocalInputValue(e.target.value));
-          }}
+          value={at}
+          onChange={setAt}
+          max={todayISO()}
+          error={contactDateError(at)}
         />
         <Button variant="danger" block icon="trash" onClick={drop}>
           Eintrag löschen

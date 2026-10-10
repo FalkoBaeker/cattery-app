@@ -134,6 +134,7 @@ export function planCareTasks(
  * - Erledigte Punkte bleiben immer unangetastet.
  */
 export async function syncLitterSchedule(litterId: ID, settings: Settings): Promise<void> {
+  await db.transaction('rw', db.litters, db.kittens, db.careTasks, async () => {
   const litter = await db.litters.get(litterId);
   if (!litter) return;
   const kittens = await db.kittens.where('litterId').equals(litterId).toArray();
@@ -159,6 +160,15 @@ export async function syncLitterSchedule(litterId: ID, settings: Settings): Prom
       continue;
     }
     byKey.delete(p.planKey);
+    if (current.completedKittenDates) {
+      const living = kittens.filter((kitten) => !isGone(kitten));
+      const allDone = living.length > 0 && living.every((kitten) => Boolean(current.completedKittenDates?.[kitten.id]));
+      const doneAt = allDone ? living.map((kitten) => current.completedKittenDates![kitten.id]).sort().at(-1) : undefined;
+      if (current.doneAt !== doneAt) {
+        await patch(db.careTasks, current.id, { doneAt });
+        current.doneAt = doneAt;
+      }
+    }
     if (current.doneAt) continue;
     if (current.dueDate !== p.dueDate || current.title !== p.title) {
       await patch(db.careTasks, current.id, { dueDate: p.dueDate, title: p.title, detail: p.detail });
@@ -167,9 +177,10 @@ export async function syncLitterSchedule(litterId: ID, settings: Settings): Prom
 
   // Was übrig bleibt, gehört nicht mehr zum Plan.
   for (const orphan of byKey.values()) {
-    if (orphan.doneAt) continue;
+    if (orphan.doneAt || Object.keys(orphan.completedKittenDates ?? {}).length) continue;
     await db.careTasks.delete(orphan.id);
   }
+  });
 }
 
 /** Zieht einen geänderten Fahrplan für alle bereits geborenen Würfe nach. */

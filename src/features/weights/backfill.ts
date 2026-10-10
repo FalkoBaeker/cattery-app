@@ -26,9 +26,11 @@ export function monthCells(month: ISODate): Array<ISODate | null> {
 
 /** Ein lokales Datum und eine lokale Uhrzeit als gespeicherten ISO-Zeitpunkt verbinden. */
 export function localDateTime(date: ISODate, time: string): ISODateTime | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
   if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return null;
   const [hours, minutes] = time.split(':').map(Number);
   const value = parseISODate(date);
+  if (!Number.isFinite(value.getTime()) || toISODate(value) !== date) return null;
   value.setHours(hours, minutes, 0, 0);
   return value.toISOString();
 }

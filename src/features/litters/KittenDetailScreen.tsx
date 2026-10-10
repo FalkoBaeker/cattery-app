@@ -32,7 +32,7 @@ import {
   collarColor,
   kittenLabel,
 } from '../../types';
-import type { ID, ISODate, KittenSaleStatus } from '../../types';
+import type { CareTask, ID, ISODate, KittenSaleStatus } from '../../types';
 import { db } from '../../db/db';
 import { WEIGHT_LEVEL_LABEL, WEIGHT_LEVEL_TONE, analyzeWeights, litterAverageWeight } from '../../domain/weight';
 import {
@@ -58,6 +58,8 @@ import { isLivingKitten } from './litter';
 import { useSettings } from './hooks';
 import { CollarDot, DataRow, DateInput, Loading, SaleStatusBadge } from './parts';
 import { KittenEditorSheet } from './KittenEditorSheet';
+import { CareTaskSheet } from './CareTaskSheet';
+import { careDateForKitten } from './care';
 
 const SALE_HINT: Record<KittenSaleStatus, string> = {
   available: 'Noch niemandem versprochen.',
@@ -79,6 +81,8 @@ export function KittenDetailScreen() {
   const [saleSheet, setSaleSheet] = useState(false);
   const [deathSheet, setDeathSheet] = useState(false);
   const [allWeights, setAllWeights] = useState(false);
+  const [careOpen, setCareOpen] = useState(false);
+  const [editingCare, setEditingCare] = useState<CareTask>();
 
   const data = useLiveQuery(async () => {
     if (!kittenId) return { missing: true } as const;
@@ -109,6 +113,7 @@ export function KittenDetailScreen() {
       weights,
       siblingWeights,
       tasks: ownTasks.filter((t) => !t.kittenId || t.kittenId === kitten.id),
+      allTasks: ownTasks,
       events: events.filter((e) => e.kittenId === kitten.id),
       interests,
       appointments: appointments.filter((a) => a.kittenIds?.includes(kitten.id)),
@@ -127,7 +132,7 @@ export function KittenDetailScreen() {
     for (const w of data.siblingWeights) {
       byKitten.get(w.kittenId)?.push({ at: w.at, grams: w.grams });
     }
-    const birth = data.litter?.birthDate;
+    const birth = data.kitten.bornAt ? dateOf(data.kitten.bornAt) : data.litter?.birthDate;
     return analyzeWeights(data.weights, settings.weight, {
       birthWeightG: data.kitten.birthWeightG,
       litterAverageG: litterAverageWeight(byKitten, data.kitten.id),
@@ -209,6 +214,7 @@ export function KittenDetailScreen() {
     title: string;
     detail?: string;
     dim?: boolean;
+    task?: CareTask;
   }
 
   const timeline: TimelineItem[] = [];
@@ -241,15 +247,19 @@ export function KittenDetailScreen() {
   }
 
   for (const t of tasks) {
+    const completedAt = careDateForKitten(t, kitten.id);
     timeline.push({
       key: `t-${t.id}`,
-      date: t.doneAt ?? t.dueDate,
+      date: completedAt ?? t.dueDate,
       icon: t.kind === 'vaccination' ? 'syringe' : t.kind === 'chip' ? 'chip' : t.kind === 'neuter' ? 'scissors' : 'pill',
       title: t.title,
-      detail: t.doneAt ? 'erledigt' : `fällig ${formatDate(t.dueDate)}`,
-      dim: !t.doneAt,
+      detail: completedAt ? `erledigt ${formatDate(completedAt)}` : `fällig ${formatDate(t.dueDate)}`,
+      dim: !completedAt,
+      task: t,
     });
   }
+
+  if (kitten.handoverDate) timeline.push({ key: 'handover', date: kitten.handoverDate, icon: 'calendar', title: 'Abgeholt' });
 
   if (settings.modules.appointments) {
     for (const a of appointments) {
@@ -429,7 +439,7 @@ export function KittenDetailScreen() {
           )}
 
         {/* --- Stammdaten -------------------------------------------- */}
-        <Section title="Stammdaten">
+        <Section title="Stammdaten" action={litter && <Button size="sm" icon="plus" onClick={() => { setEditingCare(undefined); setCareOpen(true); }}>Ereignis</Button>}>
           <List>
             <ListRow
               leading={<Icon name="chip" size={20} className="text-text-dim" />}
@@ -481,18 +491,9 @@ export function KittenDetailScreen() {
           title="Gewicht"
           action={
             litter && (
-              <div className="flex gap-1">
                 <Button size="sm" icon="scale" onClick={() => navigate(`/wiegen/${litter.id}`)}>
                   Wiegen
                 </Button>
-                <Button
-                  size="sm"
-                  icon="calendar"
-                  onClick={() => navigate(`/zucht/kitten/${kitten.id}/gewicht-nachtragen`)}
-                >
-                  Nachtragen
-                </Button>
-              </div>
             )
           }
         >
@@ -517,12 +518,12 @@ export function KittenDetailScreen() {
               <WeightChart
                 series={chartSeries}
                 focusKittenId={kitten.id}
-                birthDate={litter?.birthDate}
+                birthDate={kitten.bornAt ? dateOf(kitten.bornAt) : litter?.birthDate}
               />
               <div className="mt-3 border-t border-border pt-1">
                 <WeightHistory
                   kittenId={kitten.id}
-                  birthDate={litter?.birthDate}
+                  birthDate={kitten.bornAt ? dateOf(kitten.bornAt) : litter?.birthDate}
                   limit={allWeights ? undefined : 8}
                 />
               </div>
@@ -578,6 +579,7 @@ export function KittenDetailScreen() {
                         <span className="text-[0.82rem] text-text-faint">{item.detail}</span>
                       )}
                     </span>
+                    {item.task && <IconButton icon="edit" label={`${item.title} bearbeiten`} onClick={() => { setEditingCare(item.task); setCareOpen(true); }} />}
                   </li>
                 ))}
               </ul>
@@ -617,6 +619,14 @@ export function KittenDetailScreen() {
       </Stack>
 
       {/* --- Blätter -------------------------------------------------- */}
+      {careOpen && litter && <CareTaskSheet
+        task={editingCare}
+        tasks={data.allTasks}
+        litter={litter}
+        kittens={siblings}
+        defaultKittenId={kitten.id}
+        onClose={() => setCareOpen(false)}
+      />}
       {/* Auch ohne Wurf (etwa nach dessen Löschung) bleibt das Kitten
           bearbeitbar — der Stift darf nie ins Leere zeigen. */}
       <KittenEditorSheet

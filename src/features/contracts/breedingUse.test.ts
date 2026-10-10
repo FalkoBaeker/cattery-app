@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { db, insert, wipeDatabase } from '../../db/db';
-import { todayISO } from '../../lib/date';
+import { addDays, dateOf, fromLocalInputValue, todayISO } from '../../lib/date';
 import type { BreedingUse, Contract, ContractData } from '../../types';
 import { BREEDING_USE_STAGE_ORDER } from '../../types';
 import {
@@ -12,6 +12,8 @@ import {
   naechsteStufe,
   stufeSetzen,
   stufenIndex,
+  verlaufDatumSetzen,
+  verlaufsnotizHinzufuegen,
   vorgangAnlegen,
   vorgangAusVertragAktualisieren,
   vorgangZuVertrag,
@@ -210,6 +212,49 @@ describe('Verlauf und Verlängerung', () => {
     for (const eintrag of vorgang.history) {
       expect(eintrag.at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
     }
+  });
+
+  it('stores historical stages and corrections without changing the latest logical stage', async () => {
+    let use = (await vorgangAnlegen(await vertragAnlegen())) as BreedingUse;
+    const historical = fromLocalInputValue(`${addDays(todayISO(), -10)}T11:00`);
+    await stufeSetzen(use, 'neutered', undefined, historical);
+    use = (await db.breedingUses.get(use.id)) as BreedingUse;
+    expect(use.stage).toBe('neutered');
+    expect(use.history.at(-1)?.at).toBe(historical);
+    await stufeSetzen(use, 'ownership_transferred');
+    use = (await db.breedingUses.get(use.id)) as BreedingUse;
+    const correction = fromLocalInputValue(`${addDays(todayISO(), -15)}T10:00`);
+    await verlaufDatumSetzen(use, 1, correction);
+    const stored = (await db.breedingUses.get(use.id)) as BreedingUse;
+    expect(stored.stage).toBe('ownership_transferred');
+    expect(stored.history.map((entry) => entry.stage)).toEqual(['at_buyer', 'neutered', 'ownership_transferred']);
+    expect(stored.history[1].at).toBe(correction);
+  });
+
+  it('validates event timestamps before stage, extension, note, and correction writes', async () => {
+    const use = (await vorgangAnlegen(await vertragAnlegen())) as BreedingUse;
+    const future = fromLocalInputValue(`${addDays(todayISO(), 1)}T12:00`);
+    for (const at of [future, 'invalid', '2026-02-30T12:00:00.000Z']) {
+      await expect(stufeSetzen(use, 'neutered', undefined, at)).rejects.toThrow();
+      await expect(fristVerlaengern(use, at)).rejects.toThrow();
+      await expect(verlaufsnotizHinzufuegen(use, 'Notiz', at)).rejects.toThrow();
+      await expect(verlaufDatumSetzen(use, 0, at)).rejects.toThrow();
+    }
+    expect(await db.breedingUses.get(use.id)).toEqual(use);
+  });
+
+  it('records and corrects the actual extension date without changing the deadline or stage', async () => {
+    let use = (await vorgangAnlegen(await vertragAnlegen())) as BreedingUse;
+    const at = fromLocalInputValue(`${addDays(todayISO(), -4)}T10:00`);
+    await fristVerlaengern(use, at);
+    use = (await db.breedingUses.get(use.id)) as BreedingUse;
+    expect(use.extendedAt).toBe(dateOf(at));
+    const correctedAt = fromLocalInputValue(`${addDays(todayISO(), -8)}T11:00`);
+    await verlaufDatumSetzen(use, 1, correctedAt);
+    const stored = (await db.breedingUses.get(use.id)) as BreedingUse;
+    expect(stored.extendedAt).toBe(dateOf(correctedAt));
+    expect(stored.deadlineDate).toBe(use.deadlineDate);
+    expect(stored.stage).toBe(use.stage);
   });
 
   it('verlängert einmalig und merkt sich das', async () => {

@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
 
 import { ConfirmProvider, ToastProvider } from '../../ui';
 import { db, insert, wipeDatabase } from '../../db/db';
-import { addMonths, todayISO } from '../../lib/date';
+import { addDays, addMonths, fromLocalInputValue, todayISO } from '../../lib/date';
 import { fristende, monateBisFrist } from './calc';
 import type { BreedingUse, Contract } from '../../types';
 import { BreedingUseScreen } from './BreedingUseScreen';
@@ -118,11 +118,17 @@ describe('Zuchtnutzungs-Vorgang', () => {
     zeichne(v.id);
 
     await nutzer.click(await screen.findByRole('button', { name: /Zur Deckung angefordert/ }));
+    expect((await db.breedingUses.get(v.id))?.stage).toBe('at_buyer');
+    const eventDate = addDays(todayISO(), -10);
+    fireEvent.change(screen.getByLabelText(/^Datum des Ereignisses/), { target: { value: eventDate } });
+    fireEvent.change(screen.getByLabelText('Uhrzeit'), { target: { value: '09:30' } });
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
 
     await waitFor(async () => {
       const nachher = await db.breedingUses.get(v.id);
       expect(nachher?.stage).toBe('requested');
       expect(nachher?.history).toHaveLength(2);
+      expect(nachher?.history.at(-1)?.at).toBe(fromLocalInputValue(`${eventDate}T09:30`));
     });
   });
 
@@ -134,6 +140,7 @@ describe('Zuchtnutzungs-Vorgang', () => {
     await nutzer.click(
       await screen.findByRole('button', { name: 'Frist um 6 Monate verlängern' }),
     );
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
     await nutzer.click(await screen.findByRole('button', { name: 'Verlängern' }));
 
     await waitFor(async () => {
@@ -210,6 +217,7 @@ describe('Zuchtnutzungs-Vorgang', () => {
     zeichne(v.id);
 
     await nutzer.click(await screen.findByRole('button', { name: 'Vorgang abbrechen' }));
+    await nutzer.click(screen.getByRole('button', { name: 'Speichern' }));
     await nutzer.click(await screen.findByRole('button', { name: 'Abbrechen' }));
 
     await waitFor(async () => {
@@ -224,5 +232,40 @@ describe('Zuchtnutzungs-Vorgang', () => {
     zeichne(v.id);
     expect(await screen.findByText('Zuchtnutzung erfüllt')).toBeInTheDocument();
     expect(screen.queryByText(/entfällt der/)).not.toBeInTheDocument();
+  });
+
+  it('korrigiert ein Kastrationsdatum und sortiert den Verlauf, ohne den aktuellen Stand zu ändern', async () => {
+    const v = await vorgangMitStart(1);
+    const matingAt = fromLocalInputValue(`${addDays(todayISO(), -8)}T10:00`);
+    const neuteredAt = fromLocalInputValue(`${addDays(todayISO(), -4)}T10:00`);
+    const correctedDate = addDays(todayISO(), -12);
+    await db.breedingUses.update(v.id, {
+      stage: 'neutered',
+      history: [{ stage: 'mated', at: matingAt }, { stage: 'neutered', at: neuteredAt }],
+    });
+    zeichne(v.id);
+    await userEvent.click(await screen.findByRole('button', { name: /^Kastriert/ }));
+    const dialog = screen.getByRole('dialog', { name: 'Ereignisdatum ändern' });
+    fireEvent.change(within(dialog).getByLabelText(/^Datum des Ereignisses/), { target: { value: correctedDate } });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Übernehmen' }));
+
+    await waitFor(async () => {
+      const stored = await db.breedingUses.get(v.id);
+      expect(stored?.stage).toBe('neutered');
+      expect(stored?.history[1].at).toBe(fromLocalInputValue(`${correctedDate}T10:00`));
+    });
+    const timeline = screen.getByRole('heading', { name: 'Verlauf' }).closest('section')!;
+    expect(within(timeline).getAllByRole('button').map((button) => button.textContent))
+      .toEqual([expect.stringContaining('Gedeckt'), expect.stringContaining('Kastriert')]);
+  });
+
+  it('blocks saving a stage dated in the future', async () => {
+    const v = await vorgangMitStart(1);
+    zeichne(v.id);
+    await userEvent.click(await screen.findByRole('button', { name: /Zur Deckung angefordert/ }));
+    fireEvent.change(screen.getByLabelText(/^Datum des Ereignisses/), { target: { value: addDays(todayISO(), 1) } });
+    expect(screen.getByRole('button', { name: 'Speichern' })).toBeDisabled();
+    expect(screen.getByText('Das Ereignis darf nicht in der Zukunft liegen.')).toBeInTheDocument();
+    expect((await db.breedingUses.get(v.id))?.stage).toBe('at_buyer');
   });
 });

@@ -3,10 +3,11 @@
  * Sobald ein zweites Modul einen davon benötigt, wandert er nach src/ui/.
  */
 
-import { useId, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 import {
   Badge,
   ColorDot,
+  EventDateField,
   Icon,
   Segmented,
   Spinner,
@@ -130,20 +131,14 @@ export function DateInput({
   max?: string;
   min?: string;
 }) {
-  const id = useId();
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={id} className="px-1 text-[0.85rem] font-medium text-text-dim">
-        {label}
-      </label>
-      <input
-        id={id}
-        type="date"
+      <EventDateField
+        label={label}
         value={value ?? ''}
         max={max}
         min={min}
-        onChange={(e) => onChange(e.target.value || undefined)}
-        className="min-h-11 w-full rounded-[var(--radius-field)] border border-border bg-surface px-3.5 py-2.5 text-text focus:border-accent"
+        onChange={(date) => onChange(date || undefined)}
       />
       {hint && <p className="px-1 text-[0.8rem] text-text-faint">{hint}</p>}
     </div>
@@ -203,14 +198,14 @@ export function CollarPicker({
               aria-checked={active}
               onClick={() => onChange(c.key)}
               className={[
-                'flex min-h-16 flex-col items-center justify-center gap-1 rounded-[var(--radius-card)] border p-2 transition-colors',
+                'collar-swatch flex min-h-16 flex-col items-center justify-center gap-1 rounded-[var(--radius-card)] border p-2 transition-colors',
                 active
                   ? 'border-accent bg-accent-soft'
                   : 'border-border bg-surface active:bg-surface-2',
               ].join(' ')}
             >
               <span className="relative flex items-center justify-center">
-                <ColorDot hex={c.hex} size={22} />
+                <span className="collar-swatch-dot flex items-center justify-center"><ColorDot hex={c.hex} size={22} /></span>
                 {active && (
                   <Icon
                     name="check"

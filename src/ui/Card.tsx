@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Icon, type IconName } from './Icon';
+import { BrandImage, type BrandImageName } from './BrandImage';
 
 /* ------------------------------------------------------------------ */
 /*  Karte / Abschnitt                                                  */
@@ -17,7 +18,7 @@ export function Card({
   return (
     <div
       className={[
-        'rounded-[var(--radius-card)] border border-border bg-surface shadow-[var(--shadow-card)]',
+        'pearl-panel rounded-[var(--radius-card)] border border-border bg-surface shadow-[var(--shadow-card)]',
         padded ? 'p-4' : '',
         className,
       ].join(' ')}
@@ -43,16 +44,16 @@ export function Section({
   return (
     <section className={['flex flex-col gap-2', className].join(' ')}>
       {(title || action) && (
-        <header className="flex items-end justify-between gap-3 px-1">
-          <div className="min-w-0">
+        <header className="flex flex-wrap items-end justify-between gap-x-3 gap-y-2 px-1">
+          <div className="min-w-0 flex-[1_1_10rem]">
             {title && (
-              <h2 className="text-[0.8rem] font-semibold tracking-wide text-text-dim uppercase">
+              <h2 className="section-title text-[0.8rem] font-semibold text-text-dim uppercase">
                 {title}
               </h2>
             )}
             {description && <p className="mt-0.5 text-sm text-text-faint">{description}</p>}
           </div>
-          {action}
+          {action && <div className="flex max-w-full flex-wrap items-center gap-2">{action}</div>}
         </header>
       )}
       {children}
@@ -69,7 +70,7 @@ export function List({ children, className = '' }: { children: ReactNode; classN
   return (
     <div
       className={[
-        'overflow-hidden rounded-[var(--radius-card)] border border-border bg-surface shadow-[var(--shadow-card)]',
+        'pearl-panel overflow-hidden rounded-[var(--radius-card)] border border-border bg-surface shadow-[var(--shadow-card)]',
         '[&>*+*]:border-t [&>*+*]:border-border',
         className,
       ].join(' ')}
@@ -136,7 +137,7 @@ export function ListRow({
 
   if (interactive) {
     return (
-      <button type="button" onClick={onClick} className={[base, 'active:bg-surface-2', className].join(' ')}>
+      <button type="button" onClick={onClick} className={[base, 'list-row transition-colors active:bg-surface-2', className].join(' ')}>
         {inner}
       </button>
     );
@@ -147,6 +148,15 @@ export function ListRow({
 /* ------------------------------------------------------------------ */
 /*  Leerzustand                                                        */
 /* ------------------------------------------------------------------ */
+
+const EMPTY_ART: Partial<Record<IconName, BrandImageName>> = {
+  cat: 'cat-family',
+  paw: 'cat-family',
+  home: 'today',
+  users: 'waitlist',
+  calendar: 'calendar',
+  menu: 'more',
+};
 
 export function EmptyState({
   icon = 'paw',
@@ -159,11 +169,16 @@ export function EmptyState({
   description?: string;
   action?: ReactNode;
 }) {
+  const artwork = EMPTY_ART[icon];
   return (
-    <div className="flex flex-col items-center gap-3 rounded-[var(--radius-card)] border border-dashed border-border px-6 py-10 text-center">
-      <span className="flex size-12 items-center justify-center rounded-full bg-surface-2 text-text-faint">
-        <Icon name={icon} size={24} />
-      </span>
+    <div className="empty-state flex flex-col items-center gap-3 px-6 py-7 text-center">
+      {artwork ? (
+        <BrandImage name={artwork} className={artwork === 'cat-family' ? 'empty-art size-40' : 'empty-art size-24'} />
+      ) : (
+        <span className="pearl-panel flex size-14 items-center justify-center rounded-xl border border-border text-accent shadow-card">
+          <Icon name={icon} size={26} />
+        </span>
+      )}
       <div className="flex flex-col gap-1">
         <p className="font-medium text-text">{title}</p>
         {description && (

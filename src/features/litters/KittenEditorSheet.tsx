@@ -7,6 +7,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Button,
   Callout,
+  EventDateField,
+  EventDateTimeField,
   MoneyInput,
   NumberInput,
   Select,
@@ -31,6 +33,8 @@ import { syncLitterSchedule } from '../../domain/schedule';
 import { addKitten, linkInterest, noonOf, revokeKittenDeath, syncBirthWeightEntry } from './data';
 import { isLivingKitten, suggestCollarColor } from './litter';
 import { CollarPicker, SexPicker } from './parts';
+import { dateOf, fromLocalInputValue, todayISO, toLocalInputValue } from '../../lib/date';
+import { isValidISODate } from '../cats/heat';
 
 /** „Verstorben" wird über den eigenen, behutsamen Vorgang gesetzt. */
 const SALE_OPTIONS = (Object.keys(KITTEN_SALE_STATUS_LABEL) as KittenSaleStatus[])
@@ -83,6 +87,8 @@ export function KittenEditorSheet({
   const [saleStatus, setSaleStatus] = useState<KittenSaleStatus>('available');
   const [interestId, setInterestId] = useState('');
   const [notes, setNotes] = useState('');
+  const [bornAt, setBornAt] = useState('');
+  const [handoverDate, setHandoverDate] = useState('');
   const [saving, setSaving] = useState(false);
   const deathMarked = Boolean(kitten && !isLivingKitten(kitten));
 
@@ -105,7 +111,9 @@ export function KittenEditorSheet({
     setSaleStatus(deathMarked ? 'available' : (kitten?.saleStatus ?? 'available'));
     setInterestId(kitten?.interestId ?? '');
     setNotes(kitten?.notes ?? '');
-  }, [open, kitten, usedColors, settings.defaultKittenPriceCents, deathMarked]);
+    setBornAt(kitten?.bornAt ? toLocalInputValue(kitten.bornAt) : litter?.birthDate ? toLocalInputValue(noonOf(litter.birthDate)) : kitten || siblings.length ? '' : `${todayISO()}T12:00`);
+    setHandoverDate(kitten?.handoverDate ?? '');
+  }, [open, kitten, litter, siblings.length, usedColors, settings.defaultKittenPriceCents, deathMarked]);
 
   const statusChangesSchedule =
     kitten != null &&
@@ -115,6 +123,9 @@ export function KittenEditorSheet({
   async function save() {
     setSaving(true);
     try {
+      const birthTime = bornAt ? fromLocalInputValue(bornAt) : undefined;
+      if (!birthTime || !isValidISODate(bornAt.slice(0, 10)) || Number.isNaN(new Date(birthTime).getTime()) || birthTime > new Date().toISOString()) throw new Error('Bitte das tatsächliche Geburtsdatum und eine gültige Uhrzeit bis jetzt wählen.');
+      if (handoverDate && (!isValidISODate(handoverDate) || handoverDate > todayISO() || handoverDate < dateOf(birthTime))) throw new Error('Bitte ein gültiges Abholdatum zwischen Geburt und heute wählen.');
       if (kitten) {
         const statusBefore = kitten.saleStatus;
         await patch(db.kittens, kitten.id, {
@@ -122,6 +133,8 @@ export function KittenEditorSheet({
           callName: callName.trim() || undefined,
           sex,
           birthWeightG: birthWeightG ?? undefined,
+          bornAt: birthTime,
+          handoverDate: handoverDate || undefined,
           chipNo: chipNo.trim() || undefined,
           priceCents: priceCents ?? undefined,
           saleStatus: deathMarked ? statusBefore : saleStatus,
@@ -130,7 +143,7 @@ export function KittenEditorSheet({
         await linkInterest(kitten, interestId || undefined);
         // Die aus dem Geburtsgewicht erzeugte Wiegung mitziehen, sonst
         // widersprechen sich Kopfzeile und Gewichtskurve.
-        await syncBirthWeightEntry(kitten, birthWeightG ?? undefined);
+        await syncBirthWeightEntry({ ...kitten, bornAt: birthTime }, birthWeightG ?? undefined, kitten.bornAt);
         await syncLitterSchedule(kitten.litterId, settings);
 
         if (!deathMarked && statusBefore !== saleStatus) {
@@ -163,19 +176,20 @@ export function KittenEditorSheet({
             callName,
             sex,
             birthWeightG: birthWeightG ?? undefined,
-            bornAt: litter.birthDate ? noonOf(litter.birthDate) : undefined,
+            bornAt: birthTime,
             saleStatus,
             notes,
           },
           settings,
         );
         if (interestId) await linkInterest(created, interestId);
+        if (handoverDate) await patch(db.kittens, created.id, { handoverDate });
         toast.success('Kitten angelegt');
         onSaved?.(created.id);
       }
       onClose();
     } catch (e) {
-      toast.error('Speichern fehlgeschlagen. Bitte noch einmal versuchen.');
+      toast.error(e instanceof Error ? e.message : 'Speichern fehlgeschlagen. Bitte noch einmal versuchen.');
       console.error(e);
     } finally {
       setSaving(false);
@@ -221,6 +235,7 @@ export function KittenEditorSheet({
         />
 
         <SexPicker value={sex} onChange={setSex} />
+        <EventDateTimeField label="Geboren am" value={bornAt} onChange={setBornAt} max={`${todayISO()}T23:59`} required />
 
         <NumberInput
           label="Geburtsgewicht"
@@ -264,6 +279,7 @@ export function KittenEditorSheet({
             </p>
           </Callout>
         )}
+        {(saleStatus === 'sold' || saleStatus === 'sold_breeding_reserved' || handoverDate) && <EventDateField label="Abgeholt am" value={handoverDate} onChange={setHandoverDate} max={todayISO()} min={bornAt.slice(0, 10)} />}
 
         <Select
           label="Interessent"

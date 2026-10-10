@@ -53,6 +53,7 @@ export const COLLAR_COLORS = [
   { key: 'turquoise', label: 'Türkis', hex: '#0097a7' },
   { key: 'white', label: 'Weiß', hex: '#eef0f2' },
   { key: 'black', label: 'Schwarz', hex: '#15181c' },
+  { key: 'gray', label: 'Grau', hex: '#89939e' },
   { key: 'beige', label: 'Beige', hex: '#c7a36b' },
   { key: 'brown', label: 'Braun', hex: '#70401f' },
   { key: 'none', label: 'ohne', hex: '#8b929b' },
@@ -246,6 +247,7 @@ export interface Kitten extends Timestamped {
   /** Verknüpfter Interessent, sobald reserviert/verkauft. */
   interestId?: ID;
   priceCents?: number;
+  handoverDate?: ISODate;
   diedAt?: ISODate;
   deathNote?: string;
   photoAttachmentId?: ID;
@@ -309,6 +311,8 @@ export interface CareTask extends Timestamped {
   title: string;
   dueDate: ISODate;
   doneAt?: ISODate;
+  /** Tatsächliche Erledigungsdaten je Kitten bei einer wurfweiten Aufgabe. */
+  completedKittenDates?: Record<ID, ISODate>;
   /** Wurfweite Aufgabe, wenn kittenId leer bleibt. */
   litterId?: ID;
   kittenId?: ID;

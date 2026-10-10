@@ -12,7 +12,9 @@ ausschließlich im Browser auf dem verwendeten Gerät.
 
 - Zuchttiere mit Gesundheitsdaten, Rolligkeitskalender und Zeitstrahl
 - Würfe, Geburtsprotokoll, Wehen-Timer und 12-Wochen-Fahrplan
-- schneller Wiege-Modus mit Verlauf, Durchschnitt und Warnstufen
+- gemeinsame Wiegerunden mit Datum, Verlauf, Durchschnitt und Warnstufen
+- rückdatierbare Ereignisse für einzelne Tiere, eine Auswahl oder den ganzen Wurf
+- Wurfarchiv nach Katze oder Jahr mit kombinierbaren Filtern
 - Interessenten, Kontaktverlauf, Kitten-Zuordnung und WhatsApp-Einzelnachrichten
 - Termine mit In-App-Erinnerungen und Nachbereitung
 - fotografierte Dokumente mit Zuschnitt, Drehung und Offline-Vollbildansicht
@@ -21,6 +23,24 @@ ausschließlich im Browser auf dem verwendeten Gerät.
 - wurfbezogene Kostenübersicht
 - vollständige Datensicherung und Wiederherstellung als Datei
 - heller, dunkler und systemabhängiger Modus
+
+## Ereignisse und Archiv
+
+Gewichte werden im Wurf unter **Wiegen** gemeinsam für das gewählte Datum
+gespeichert. **Heute**, **Gestern** und das Kalenderfeld stehen direkt bei
+der Eingabe. Im Fahrplan öffnet ein Punkt das Ereignisformular mit Datum und
+Tierauswahl; gespeicherte Daten sind dort und im Kitten-Zeitstrahl korrigierbar.
+Weitere Ereignisse lassen sich im Wurf oder im Tierprofil eintragen.
+
+Unter **Zucht → Archiv** bleiben abgeschlossene und abgebrochene Würfe
+zugänglich. Der Abschluss wird vorgeschlagen, sobald die Kitten abgeholt,
+behalten oder abschließend dokumentiert sind, und verlangt eine Bestätigung.
+Verkauft allein bedeutet noch nicht abgeholt. Das Abholdatum lässt sich im
+Kittenformular ergänzen.
+
+Beim ersten Kitten wird das tatsächliche Geburtsdatum erfasst. Bestehende
+Würfe mit Kitten werden beim Start als geboren erkannt; fehlt ein belegtes
+Datum, fragt das Wurfprofil danach.
 
 ## Lokal starten
 

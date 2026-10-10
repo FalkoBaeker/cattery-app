@@ -8,6 +8,8 @@ import {
   Callout,
   Card,
   EmptyState,
+  EventDateField,
+  EventDateTimeField,
   Icon,
   List,
   ListRow,
@@ -17,12 +19,11 @@ import {
   Spinner,
   Stack,
   TextArea,
-  TextInput,
   useConfirm,
   useToast,
 } from '../../ui';
-import { db, patch } from '../../db/db';
-import { dateOf, formatDate, formatDateTime, formatDeadline, nowISO } from '../../lib/date';
+import { db } from '../../db/db';
+import { dateOf, formatDate, formatDateTime, formatDeadline, fromLocalInputValue, nowISO, todayISO, toLocalInputValue } from '../../lib/date';
 import { formatMoney } from '../../lib/format';
 import type { BreedingUseStage } from '../../types';
 import { BREEDING_USE_STAGE_LABEL, BREEDING_USE_STAGE_ORDER } from '../../types';
@@ -41,8 +42,19 @@ import {
   naechsteStufe,
   stufeSetzen,
   stufenIndex,
+  verlaufDatumSetzen,
+  verlaufsnotizHinzufuegen,
   zuchtnutzungErfuellt,
 } from './breedingUse';
+
+function eventDateError(value: string): string | undefined {
+  const time = new Date(value).getTime();
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value) || !Number.isFinite(time) ||
+    toLocalInputValue(new Date(time).toISOString()) !== value) {
+    return 'Bitte Datum und Uhrzeit eintragen.';
+  }
+  return time > Date.now() ? 'Das Ereignis darf nicht in der Zukunft liegen.' : undefined;
+}
 
 export function BreedingUseScreen() {
   const { breedingUseId } = useParams();
@@ -64,6 +76,9 @@ export function BreedingUseScreen() {
   const [notiz, setNotiz] = useState('');
   const [fristOffen, setFristOffen] = useState(false);
   const [neuerBeginn, setNeuerBeginn] = useState('');
+  const [ereignis, setEreignis] = useState<BreedingUseStage | 'extension' | null>(null);
+  const [ereignisDatum, setEreignisDatum] = useState(() => toLocalInputValue(nowISO()));
+  const [verlaufIndex, setVerlaufIndex] = useState<number | null>(null);
 
   if (vorgang === undefined) {
     return (
@@ -109,20 +124,28 @@ export function BreedingUseScreen() {
           ? 'warn'
           : 'accent';
 
-  async function setzeStufe(neu: BreedingUseStage) {
+  function ereignisOeffnen(neu: BreedingUseStage | 'extension') {
+    setEreignisDatum(toLocalInputValue(nowISO()));
+    setNotiz('');
+    setStufenWahlOffen(false);
+    setEreignis(neu);
+  }
+
+  async function setzeStufe(neu: BreedingUseStage, at: string) {
     if (!vorgang) return;
     try {
-      await stufeSetzen(vorgang, neu, notiz.trim() || undefined);
+      await stufeSetzen(vorgang, neu, notiz.trim() || undefined, at);
       setNotiz('');
       setStufenWahlOffen(false);
       setNotizOffen(false);
+      setEreignis(null);
       toast.success(`Neuer Stand: ${BREEDING_USE_STAGE_LABEL[neu]}`);
     } catch {
       toast.error('Der neue Stand konnte nicht gespeichert werden.');
     }
   }
 
-  async function verlaengern() {
+  async function verlaengern(at: string) {
     if (!vorgang) return;
     const ok = await confirm({
       title: `Frist um ${vorgang.extensionMonths} Monate verlängern?`,
@@ -132,14 +155,15 @@ export function BreedingUseScreen() {
     });
     if (!ok) return;
     try {
-      await fristVerlaengern(vorgang);
+      await fristVerlaengern(vorgang, at);
+      setEreignis(null);
       toast.success('Frist verlängert');
     } catch {
       toast.error('Die Verlängerung konnte nicht gespeichert werden.');
     }
   }
 
-  async function abbrechen() {
+  async function abbrechen(at: string) {
     if (!vorgang) return;
     const ok = await confirm({
       title: 'Vorgang abbrechen?',
@@ -151,9 +175,29 @@ export function BreedingUseScreen() {
     });
     if (!ok) return;
     try {
-      await stufeSetzen(vorgang, 'cancelled', 'Vorgang abgebrochen');
+      await stufeSetzen(vorgang, 'cancelled', notiz.trim() || 'Vorgang abgebrochen', at);
+      setEreignis(null);
     } catch {
       toast.error('Der Abbruch konnte nicht gespeichert werden.');
+    }
+  }
+
+  async function ereignisSpeichern() {
+    if (!ereignis || eventDateError(ereignisDatum)) return;
+    const at = fromLocalInputValue(ereignisDatum);
+    if (ereignis === 'extension') await verlaengern(at);
+    else if (ereignis === 'cancelled') await abbrechen(at);
+    else await setzeStufe(ereignis, at);
+  }
+
+  async function verlaufDatumSpeichern() {
+    if (!vorgang || verlaufIndex === null || eventDateError(ereignisDatum)) return;
+    try {
+      await verlaufDatumSetzen(vorgang, verlaufIndex, fromLocalInputValue(ereignisDatum));
+      setVerlaufIndex(null);
+      toast.success('Ereignisdatum geändert');
+    } catch {
+      toast.error('Das Ereignisdatum konnte nicht gespeichert werden.');
     }
   }
 
@@ -169,14 +213,13 @@ export function BreedingUseScreen() {
   }
 
   async function notizSpeichern() {
+    if (eventDateError(ereignisDatum)) return;
     if (!vorgang || !notiz.trim()) {
       setNotizOffen(false);
       return;
     }
     try {
-      await patch(db.breedingUses, vorgang.id, {
-        history: [...vorgang.history, { stage: vorgang.stage, at: nowISO(), note: notiz.trim() }],
-      });
+      await verlaufsnotizHinzufuegen(vorgang, notiz.trim(), fromLocalInputValue(ereignisDatum));
       setNotiz('');
       setNotizOffen(false);
       toast.success('Notiz gespeichert');
@@ -264,7 +307,7 @@ export function BreedingUseScreen() {
                 size="lg"
                 variant="primary"
                 icon="arrow-right"
-                onClick={() => void setzeStufe(naechste)}
+                onClick={() => ereignisOeffnen(naechste)}
               >
                 Weiter zu „{BREEDING_USE_STAGE_LABEL[naechste]}“
               </Button>
@@ -273,12 +316,16 @@ export function BreedingUseScreen() {
               <Button className="flex-1" icon="list" onClick={() => setStufenWahlOffen(true)}>
                 Anderer Stand
               </Button>
-              <Button className="flex-1" icon="edit" onClick={() => setNotizOffen(true)}>
+              <Button className="flex-1" icon="edit" onClick={() => {
+                setEreignisDatum(toLocalInputValue(nowISO()));
+                setNotiz('');
+                setNotizOffen(true);
+              }}>
                 Notiz
               </Button>
             </div>
             {!vorgang.extendedAt && (
-              <Button block icon="clock" onClick={() => void verlaengern()}>
+              <Button block icon="clock" onClick={() => ereignisOeffnen('extension')}>
                 Frist um {vorgang.extensionMonths} Monate verlängern
               </Button>
             )}
@@ -381,16 +428,19 @@ export function BreedingUseScreen() {
           ) : (
             <List>
               {vorgang.history
-                .slice()
-                .reverse()
-                .map((h, i) => (
+                .map((h, index) => ({ h, index }))
+                .sort((a, b) => b.h.at.localeCompare(a.h.at) || b.index - a.index)
+                .map(({ h, index }) => (
                   <ListRow
-                    key={`${h.at}-${i}`}
+                    key={index}
                     leading={<Icon name="check-circle" size={19} className="text-text-faint" />}
                     title={BREEDING_USE_STAGE_LABEL[h.stage]}
                     subtitle={h.note}
                     trailing={formatDateTime(h.at)}
-                    chevron={false}
+                    onClick={() => {
+                      setEreignisDatum(toLocalInputValue(h.at));
+                      setVerlaufIndex(index);
+                    }}
                   />
                 ))}
             </List>
@@ -398,7 +448,7 @@ export function BreedingUseScreen() {
         </Section>
 
         {!beendet && (
-          <Button block variant="danger" icon="x" onClick={() => void abbrechen()}>
+          <Button block variant="danger" icon="x" onClick={() => ereignisOeffnen('cancelled')}>
             Vorgang abbrechen
           </Button>
         )}
@@ -422,11 +472,57 @@ export function BreedingUseScreen() {
                 key={s}
                 title={BREEDING_USE_STAGE_LABEL[s]}
                 trailing={s === vorgang.stage ? <Badge tone="accent">jetzt</Badge> : undefined}
-                onClick={() => void setzeStufe(s)}
+                onClick={() => ereignisOeffnen(s)}
               />
             ))}
           </List>
         </Stack>
+      </Sheet>
+
+      <Sheet
+        open={ereignis !== null}
+        onClose={() => setEreignis(null)}
+        title={ereignis === 'extension' ? 'Verlängerung erfassen' : 'Stand erfassen'}
+        footer={
+          <Button block variant="primary" disabled={Boolean(eventDateError(ereignisDatum))} onClick={() => void ereignisSpeichern()}>
+            Speichern
+          </Button>
+        }
+      >
+        <Stack>
+          {ereignis && <p className="font-medium">{ereignis === 'extension'
+            ? `Frist um ${vorgang.extensionMonths} Monate verlängern`
+            : BREEDING_USE_STAGE_LABEL[ereignis]}</p>}
+          <EventDateTimeField
+            label="Datum des Ereignisses"
+            value={ereignisDatum}
+            onChange={setEreignisDatum}
+            max={todayISO()}
+            error={eventDateError(ereignisDatum)}
+            required
+          />
+          {ereignis !== 'extension' && <TextArea label="Notiz" value={notiz} onChange={(event) => setNotiz(event.target.value)} />}
+        </Stack>
+      </Sheet>
+
+      <Sheet
+        open={verlaufIndex !== null}
+        onClose={() => setVerlaufIndex(null)}
+        title="Ereignisdatum ändern"
+        footer={
+          <Button block variant="primary" disabled={Boolean(eventDateError(ereignisDatum))} onClick={() => void verlaufDatumSpeichern()}>
+            Übernehmen
+          </Button>
+        }
+      >
+        <EventDateTimeField
+          label="Datum des Ereignisses"
+          value={ereignisDatum}
+          onChange={setEreignisDatum}
+          max={todayISO()}
+          error={eventDateError(ereignisDatum)}
+          required
+        />
       </Sheet>
 
       {/* Notiz */}
@@ -435,18 +531,21 @@ export function BreedingUseScreen() {
         onClose={() => setNotizOffen(false)}
         title="Notiz zum Verlauf"
         footer={
-          <Button block size="lg" variant="primary" onClick={() => void notizSpeichern()}>
+          <Button block size="lg" variant="primary" disabled={Boolean(eventDateError(ereignisDatum))} onClick={() => void notizSpeichern()}>
             Speichern
           </Button>
         }
       >
-        <TextArea
-          label="Was ist passiert?"
-          rows={4}
-          placeholder="Anruf beim Käufer, Termin für die Abholung vereinbart."
-          value={notiz}
-          onChange={(e) => setNotiz(e.target.value)}
-        />
+        <Stack>
+          <EventDateTimeField label="Datum des Ereignisses" value={ereignisDatum} onChange={setEreignisDatum} max={todayISO()} error={eventDateError(ereignisDatum)} required />
+          <TextArea
+            label="Was ist passiert?"
+            rows={4}
+            placeholder="Anruf beim Käufer, Termin für die Abholung vereinbart."
+            value={notiz}
+            onChange={(e) => setNotiz(e.target.value)}
+          />
+        </Stack>
       </Sheet>
 
       {/* Fristbeginn ändern */}
@@ -461,12 +560,11 @@ export function BreedingUseScreen() {
         }
       >
         <Stack>
-          <TextInput
-            type="date"
+          <EventDateField
             label="Datum der Überlassung"
             value={neuerBeginn}
-            onChange={(e) => setNeuerBeginn(e.target.value)}
-            hint="Die Frist wird daraus neu berechnet."
+            onChange={setNeuerBeginn}
+            max={todayISO()}
           />
           {neuerBeginn && (
             <Callout tone="accent" icon="clock">

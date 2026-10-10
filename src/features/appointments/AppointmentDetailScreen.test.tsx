@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { ConfirmProvider, ToastProvider } from '../../ui';
 import { db, insert, updateSettings, wipeDatabase } from '../../db/db';
 import { AppointmentDetailScreen } from './AppointmentDetailScreen';
+import { dateOf, formatDateTime, fromLocalInputValue } from '../../lib/date';
 
 function wrap(route: string) {
   return render(
@@ -212,6 +213,11 @@ describe('AppointmentDetailScreen — Bearbeiten', () => {
 
     wrap(`/kalender/${a.id}`);
     await userEvent.click(await screen.findByRole('button', { name: 'Notiz schreiben' }));
+    const followUp = screen.getByRole('dialog', { name: "Wie war's?" });
+    expect(within(followUp).getByLabelText('Datum des Besuchs')).toHaveValue(dateOf(a.startAt));
+    expect(within(followUp).getByLabelText('Uhrzeit')).toHaveValue('11:00');
+    const correctedDate = dateOf(shift(-3));
+    fireEvent.change(within(followUp).getByLabelText('Datum des Besuchs'), { target: { value: correctedDate } });
 
     await userEvent.type(
       await screen.findByLabelText('Notiz'),
@@ -227,6 +233,7 @@ describe('AppointmentDetailScreen — Bearbeiten', () => {
       expect(notes).toHaveLength(1);
       expect(notes[0].channel).toBe('visit');
       expect(notes[0].text).toBe('Sehr nett, wollen das blaue Kitten.');
+      expect(notes[0].at).toBe(fromLocalInputValue(`${correctedDate}T11:00`));
     });
     const stored = await db.appointments.get(a.id);
     expect(stored?.followUpDone).toBe(true);
@@ -249,7 +256,7 @@ describe('AppointmentDetailScreen — Bearbeiten', () => {
 
     await waitFor(async () => {
       const stored = await db.appointments.get(a.id);
-      expect(stored?.note).toBe('Alles in Ordnung.');
+      expect(stored?.note).toBe(`${formatDateTime(a.startAt)}\nAlles in Ordnung.`);
       expect(stored?.followUpDone).toBe(true);
     });
   });

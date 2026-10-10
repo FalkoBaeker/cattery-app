@@ -1,294 +1,183 @@
-/**
- * Test der kniffligen Interaktion: eintippen, bestätigen, Fokus springt weiter,
- * sofort gespeichert, Platzhalter wird nicht mitgespeichert.
- */
-
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { db, wipeDatabase } from '../../db/db';
 import type { Kitten } from '../../types';
-import { addDays, todayISO } from '../../lib/date';
+import { addDays, dateOf, todayISO } from '../../lib/date';
 import { ConfirmProvider, ToastProvider } from '../../ui';
 import { WeighScreen } from './WeighScreen';
+import { localDateTime } from './backfill';
 
 const STAMP = { createdAt: '2026-03-03T06:00:00.000Z', updatedAt: '2026-03-03T06:00:00.000Z' };
+const yesterday = () => addDays(todayISO(), -1);
 
-function kitten(id: string, collar: Kitten['collarColor'], extra: Partial<Kitten> = {}): Kitten {
-  return {
-    id,
-    litterId: 'l1',
-    collarColor: collar,
-    sex: 'unknown',
-    stillborn: false,
-    saleStatus: 'available',
-    ...STAMP,
-    ...extra,
-  };
+function kitten(id: string, collarColor: Kitten['collarColor'], extra: Partial<Kitten> = {}): Kitten {
+  return { id, litterId: 'l1', collarColor, sex: 'unknown', stillborn: false, saleStatus: 'available', ...STAMP, ...extra };
 }
 
-async function seed(kittens: Kitten[]) {
+async function seed(kittens = [kitten('k1', 'red'), kitten('k2', 'blue'), kitten('k3', 'green')]) {
   await wipeDatabase();
-  await db.cats.put({
-    id: 'c1',
-    callName: 'Mira',
-    sex: 'female',
-    breed: 'Russisch Blau',
-    status: 'active',
-    isOwn: true,
-    ...STAMP,
-  });
-  await db.litters.put({
-    id: 'l1',
-    motherId: 'c1',
-    status: 'born',
-    birthDate: '2026-03-03',
-    ...STAMP,
-  });
-  for (const k of kittens) await db.kittens.put(k);
+  await db.litters.put({ id: 'l1', motherId: 'c1', status: 'born', birthDate: addDays(todayISO(), -5), ...STAMP });
+  await db.kittens.bulkPut(kittens);
 }
 
 function renderScreen() {
   return render(
-    <ToastProvider>
-      <ConfirmProvider>
-        <MemoryRouter initialEntries={['/wiegen/l1']}>
-          <Routes>
-            <Route path="/wiegen/:litterId" element={<WeighScreen />} />
-          </Routes>
-        </MemoryRouter>
-      </ConfirmProvider>
-    </ToastProvider>,
+    <ToastProvider><ConfirmProvider>
+      <MemoryRouter initialEntries={['/wiegen/l1']}>
+        <Routes><Route path="/wiegen/:litterId" element={<WeighScreen />} /></Routes>
+      </MemoryRouter>
+    </ConfirmProvider></ToastProvider>,
   );
 }
 
-function todayAt(hour: number): string {
-  const [year, month, day] = todayISO().split('-').map(Number);
-  return new Date(year, month - 1, day, hour, 0, 0).toISOString();
+function setTime(time: string) {
+  fireEvent.change(screen.getByLabelText('Uhrzeit (optional)'), { target: { value: time } });
 }
 
-beforeAll(() => {
-  // jsdom kennt scrollIntoView nicht.
-  Element.prototype.scrollIntoView = vi.fn();
-});
+beforeAll(() => { Element.prototype.scrollIntoView = vi.fn(); });
 
 describe('WeighScreen', () => {
-  beforeEach(async () => {
-    await seed([kitten('k1', 'red'), kitten('k2', 'blue'), kitten('k3', 'green')]);
-  });
+  beforeEach(async () => { vi.restoreAllMocks(); await seed(); });
 
-  it('speichert sofort und springt zum nächsten Kitten', async () => {
+  it('zeigt heute und speichert den ganzen Durchgang erst nach ausdrücklichem Speichern', async () => {
     const user = userEvent.setup();
     renderScreen();
-
-    const rot = await screen.findByLabelText('Gewicht von Rot in Gramm');
-    await user.click(rot);
-    await user.keyboard('95');
-    await act(async () => {
-      fireEvent.keyDown(rot, { key: 'Enter' });
-      await vi.waitFor(async () => expect(await db.weights.count()).toBe(1));
-    });
-    const entry = (await db.weights.toArray())[0];
-    expect(entry.kittenId).toBe('k1');
-    expect(entry.grams).toBe(95);
-
-    // Fokus steht jetzt auf dem nächsten Kitten.
-    expect(document.activeElement?.id).toBe('weigh-k2');
-    expect(screen.getByText('95 g gespeichert')).toBeInTheDocument();
-    expect(await screen.findByText('1 von 3 gewogen')).toBeInTheDocument();
-    // Das eben benutzte Feld ist wieder leer.
-    expect((rot as HTMLInputElement).value).toBe('');
-  });
-
-  it('verliert eine Eingabe bei einem Datenbankfehler nicht und lässt sie erneut speichern', async () => {
-    const user = userEvent.setup();
-    vi.spyOn(db.weights, 'add').mockRejectedValueOnce(new Error('IndexedDB vorübergehend belegt'));
-    renderScreen();
-
-    const rot = (await screen.findByLabelText('Gewicht von Rot in Gramm')) as HTMLInputElement;
-    await user.click(rot);
-    await user.keyboard('95{Enter}');
-
-    expect(await screen.findByText('Das Gewicht konnte nicht gespeichert werden.')).toBeInTheDocument();
-    expect(rot.value).toBe('95');
-    expect(await db.weights.count()).toBe(0);
-
-    await user.click(rot);
-    await user.keyboard('{Enter}');
-    await waitFor(async () => expect(await db.weights.count()).toBe(1));
-    expect((await db.weights.toArray())[0].grams).toBe(95);
-  });
-
-  it('behält einen schnell erfassten ganzen Wurf auch nach dem Neuöffnen vollständig', async () => {
-    const user = userEvent.setup();
-    const firstRender = renderScreen();
-
-    const rot = await screen.findByLabelText('Gewicht von Rot in Gramm');
-    await user.click(rot);
+    const red = await screen.findByLabelText('Gewicht von Rot in Gramm');
+    expect(screen.getByLabelText(/Wiegedatum/)).toHaveValue(todayISO());
+    await user.click(red);
     await user.keyboard('95{Enter}101{Enter}98{Enter}');
+    expect(await db.weights.count()).toBe(0);
+    expect(screen.getByLabelText('Gewicht von Rot in Gramm')).toHaveValue('95');
+    await user.click(screen.getByRole('button', { name: 'Gewichte speichern (3)' }));
     await waitFor(async () => expect(await db.weights.count()).toBe(3));
-    expect((await db.weights.toArray()).map((entry) => entry.kittenId).sort()).toEqual([
-      'k1',
-      'k2',
-      'k3',
-    ]);
-
-    firstRender.unmount();
-    renderScreen();
-    await waitFor(() =>
-      expect(screen.getByLabelText('Gewicht von Rot in Gramm')).toHaveAttribute('placeholder', '95'),
-    );
-    expect(screen.getByLabelText('Gewicht von Blau in Gramm')).toHaveAttribute(
-      'placeholder',
-      '101',
-    );
-    expect(screen.getByLabelText('Gewicht von Grün in Gramm')).toHaveAttribute(
-      'placeholder',
-      '98',
-    );
+    const entries = await db.weights.toArray();
+    expect(new Set(entries.map((entry) => entry.at)).size).toBe(1);
+    expect(entries.every((entry) => dateOf(entry.at) === todayISO())).toBe(true);
+    expect(await screen.findByText('95 g gespeichert')).toBeInTheDocument();
+    expect(red).toHaveValue('');
+    expect(screen.getByRole('button', { name: 'Gewichte speichern' })).toBeDisabled();
+    expect(await screen.findByText('3 von 6 Messungen')).toBeInTheDocument();
   });
 
-  it('zeigt den letzten Wert nur als Platzhalter und speichert ihn nicht mit', async () => {
-    await db.weights.put({ id: 'w1', kittenId: 'k1', at: '2026-03-05T07:00:00.000Z', grams: 128 });
+  it('speichert gestern mit gemeinsamer Uhrzeit und niemals beim Verlassen eines Feldes', async () => {
     const user = userEvent.setup();
     renderScreen();
-
-    const rot = (await screen.findByLabelText('Gewicht von Rot in Gramm')) as HTMLInputElement;
-    await waitFor(() => expect(rot.placeholder).toBe('128'));
-    expect(rot.value).toBe('');
-
-    // Ohne Eingabe darf beim Weiterklicken nichts entstehen.
+    await user.click(await screen.findByRole('button', { name: 'Gestern' }));
+    setTime('10:25');
+    const red = screen.getByLabelText('Gewicht von Rot in Gramm');
+    await user.type(red, '95');
     await user.click(screen.getByLabelText('Gewicht von Blau in Gramm'));
-    await user.click(document.body);
+    expect(await db.weights.count()).toBe(0);
+    await user.keyboard('101{Enter}98{Enter}');
+    await user.click(screen.getByRole('button', { name: 'Gewichte speichern (3)' }));
+    await waitFor(async () => expect(await db.weights.count()).toBe(3));
+    expect((await db.weights.toArray()).every((entry) => entry.at === localDateTime(yesterday(), '10:25'))).toBe(true);
+  });
+
+  it('nutzt auch ohne Uhrzeit das ausgewählte vergangene Datum', async () => {
+    const user = userEvent.setup();
+    renderScreen();
+    await user.click(await screen.findByRole('button', { name: 'Gestern' }));
+    expect(screen.getByText('Zeitpunkt: 08:00 Uhr')).toBeInTheDocument();
+    await user.type(screen.getByLabelText('Gewicht von Rot in Gramm'), '95');
+    await user.click(screen.getByRole('button', { name: 'Gewichte speichern (1)' }));
     await waitFor(async () => expect(await db.weights.count()).toBe(1));
+    expect((await db.weights.toArray())[0].at).toBe(localDateTime(yesterday(), '08:00'));
   });
 
-  it('speichert auch, wenn direkt in die nächste Zeile getippt wird', async () => {
+  it('behält alle Eingaben bei einem Schreibfehler und rollt Teilwerte zurück', async () => {
     const user = userEvent.setup();
-    renderScreen();
-
-    const rot = await screen.findByLabelText('Gewicht von Rot in Gramm');
-    await user.click(rot);
-    await user.keyboard('101');
-    await act(async () => {
-      (screen.getByLabelText('Gewicht von Grün in Gramm') as HTMLInputElement).focus();
-      await vi.waitFor(async () => expect(await db.weights.count()).toBe(1));
+    const originalAdd = db.weights.add.bind(db.weights);
+    let calls = 0;
+    vi.spyOn(db.weights, 'add').mockImplementation((...args) => {
+      if (++calls === 2) return Promise.reject(new Error('IndexedDB belegt')) as ReturnType<typeof db.weights.add>;
+      return originalAdd(...args);
     });
-    expect((await db.weights.toArray())[0].grams).toBe(101);
-    // Der Datenbankschreibvorgang ist einen Augenblick vor den davon
-    // abhängigen React-Zuständen fertig. Auch deren sichtbares Ergebnis
-    // gehört zu dieser Interaktion und muss vor Testende angekommen sein.
-    expect(await screen.findByText('101 g gespeichert')).toBeInTheDocument();
-    expect(await screen.findByText('1 von 3 gewogen')).toBeInTheDocument();
+    renderScreen();
+    await user.type(await screen.findByLabelText('Gewicht von Rot in Gramm'), '95{Enter}101{Enter}98');
+    await user.click(screen.getByRole('button', { name: 'Gewichte speichern (3)' }));
+    expect(await screen.findByText(/Die Eingaben bleiben erhalten/)).toBeInTheDocument();
+    expect(await db.weights.count()).toBe(0);
+    expect(screen.getByLabelText('Gewicht von Rot in Gramm')).toHaveValue('95');
+    expect(screen.getByLabelText('Gewicht von Blau in Gramm')).toHaveValue('101');
+    await user.click(screen.getByRole('button', { name: 'Gewichte speichern (3)' }));
+    await waitFor(async () => expect(await db.weights.count()).toBe(3));
   });
 
-  it('meldet unsinnige Eingaben auf Deutsch und speichert nichts', async () => {
+  it('behält ungespeicherte Gewichte bei abgebrochenem und bestätigtem Datumswechsel', async () => {
     const user = userEvent.setup();
     renderScreen();
-
-    const rot = await screen.findByLabelText('Gewicht von Rot in Gramm');
-    await user.click(rot);
-    await user.keyboard('0{Enter}');
-
-    expect(await screen.findByText(/zwischen 1 und/i)).toBeInTheDocument();
+    const red = await screen.findByLabelText('Gewicht von Rot in Gramm');
+    await user.type(red, '95');
+    await user.click(screen.getByRole('button', { name: 'Gestern' }));
+    let dialog = await screen.findByRole('alertdialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Abbrechen' }));
+    expect(screen.getByLabelText(/Wiegedatum/)).toHaveValue(todayISO());
+    expect(red).toHaveValue('95');
+    await user.click(screen.getByRole('button', { name: 'Gestern' }));
+    dialog = await screen.findByRole('alertdialog');
+    await user.click(within(dialog).getByRole('button', { name: 'Datum ändern' }));
+    expect(screen.getByLabelText(/Wiegedatum/)).toHaveValue(yesterday());
+    expect(red).toHaveValue('95');
     expect(await db.weights.count()).toBe(0);
   });
 
-  it('zählt den Fortschritt des Tages und lässt erneutes Wiegen zu', async () => {
-    const user = userEvent.setup();
-    renderScreen();
-
-    expect(await screen.findByText('0 von 3 gewogen')).toBeInTheDocument();
-
-    const rot = await screen.findByLabelText('Gewicht von Rot in Gramm');
-    await user.click(rot);
-    await user.keyboard('95');
-    await act(async () => {
-      fireEvent.keyDown(rot, { key: 'Enter' });
-      await vi.waitFor(async () => expect(await db.weights.count()).toBe(1));
-    });
-    expect(await screen.findByText('1 von 3 gewogen')).toBeInTheDocument();
-
-    // Zweite Wiegung am selben Tag ist der Normalfall.
-    await user.click(rot);
-    await user.keyboard('99');
-    await act(async () => {
-      fireEvent.keyDown(rot, { key: 'Enter' });
-      await vi.waitFor(async () => expect(await db.weights.count()).toBe(2));
-    });
-    expect(await screen.findByText('1 von 3 gewogen')).toBeInTheDocument();
-    expect(await screen.findByText('2× erfasst')).toBeInTheDocument();
-  });
-
-  it('meldet in den ersten zwei Wochen nach der ersten Runde noch kein Tagesziel', async () => {
-    const today = todayISO();
-    await db.litters.update('l1', { birthDate: addDays(today, -5) });
+  it('zeigt ausgewählte Tageswerte, korrigiert sie und verwendet keine späteren Platzhalter', async () => {
     await db.weights.bulkPut([
-      { id: 'w1', kittenId: 'k1', at: todayAt(7), grams: 128 },
-      { id: 'w2', kittenId: 'k2', at: todayAt(7), grams: 131 },
-      { id: 'w3', kittenId: 'k3', at: todayAt(7), grams: 126 },
+      { id: 'old', kittenId: 'k1', at: localDateTime(yesterday(), '08:00')!, grams: 95 },
+      { id: 'later', kittenId: 'k1', at: localDateTime(todayISO(), '00:00')!, grams: 110 },
     ]);
-
-    renderScreen();
-
-    expect(await screen.findByText('3 von 6 Messungen')).toBeInTheDocument();
-    expect(screen.getByText('0 von 3 vollständig')).toBeInTheDocument();
-    const progress = screen.getByRole('progressbar', {
-      name: 'Wiege-Fortschritt: 3 von 6 Messungen',
-    });
-    expect(progress).toHaveAttribute('aria-valuemax', '6');
-    expect(progress).toHaveAttribute('aria-valuenow', '3');
-    expect(screen.queryByText('3 von 3 gewogen')).not.toBeInTheDocument();
-  });
-
-  it('nimmt eine gerade gespeicherte Messung wieder zurück', async () => {
     const user = userEvent.setup();
-    const { container } = renderScreen();
-
-    const rot = await screen.findByLabelText('Gewicht von Rot in Gramm');
-    await user.click(rot);
-    await user.keyboard('95');
-    await act(async () => {
-      fireEvent.keyDown(rot, { key: 'Enter' });
-      await vi.waitFor(async () => expect(await db.weights.count()).toBe(1));
-    });
-
-    // Zurücknehmen geht an zwei Stellen: in der Zeile und in der Meldung.
-    await waitFor(() =>
-      expect(within(container).getByRole('button', { name: 'Rückgängig' })).toBeInTheDocument(),
-    );
-    expect(screen.getAllByRole('button', { name: 'Rückgängig' }).length).toBeGreaterThan(1);
-
-    await act(async () => {
-      fireEvent.click(within(container).getByRole('button', { name: 'Rückgängig' }));
-      await vi.waitFor(async () => expect(await db.weights.count()).toBe(0));
-    });
-    await waitFor(() =>
-      expect(within(container).queryByRole('button', { name: 'Rückgängig' })).toBeNull(),
-    );
+    renderScreen();
+    await user.click(await screen.findByRole('button', { name: 'Gestern' }));
+    expect(screen.getByLabelText('Gewicht von Rot in Gramm')).toHaveAttribute('placeholder', '95');
+    await user.click(screen.getByRole('button', { name: 'Rot: 95 g um 08:00 Uhr ändern' }));
+    const dialog = await screen.findByRole('dialog');
+    const input = within(dialog).getByLabelText('Gewicht');
+    await user.clear(input);
+    await user.type(input, '97');
+    await user.click(within(dialog).getByRole('button', { name: 'Speichern' }));
+    await waitFor(async () => expect((await db.weights.get('old'))?.grams).toBe(97));
+    expect(await db.weights.count()).toBe(2);
   });
 
-  it('zeigt totgeborene Kitten nicht an', async () => {
-    await seed([
-      kitten('k1', 'red'),
-      kitten('k2', 'blue', { stillborn: true }),
-      kitten('k3', 'green', { saleStatus: 'deceased' }),
-    ]);
+  it('verhindert doppelte Minuten und lässt Uhrzeitkorrektur ohne Eingabeverlust zu', async () => {
+    await db.weights.put({ id: 'old', kittenId: 'k1', at: localDateTime(yesterday(), '08:00')!, grams: 95 });
+    const user = userEvent.setup();
     renderScreen();
+    await user.click(await screen.findByRole('button', { name: 'Gestern' }));
+    setTime('08:00');
+    await user.type(screen.getByLabelText('Gewicht von Rot in Gramm'), '97');
+    await user.click(screen.getByRole('button', { name: 'Gewichte speichern (1)' }));
+    expect(await screen.findByText(/Für diese Uhrzeit/)).toBeInTheDocument();
+    expect(screen.getByLabelText('Gewicht von Rot in Gramm')).toHaveValue('97');
+    setTime('20:00');
+    await user.click(screen.getByRole('button', { name: 'Gewichte speichern (1)' }));
+    await waitFor(async () => expect(await db.weights.count()).toBe(2));
+  });
 
+  it('speichert keine Platzhalter oder leeren Zeilen', async () => {
+    await db.weights.put({ id: 'old', kittenId: 'k1', at: localDateTime(yesterday(), '08:00')!, grams: 95 });
+    const user = userEvent.setup();
+    renderScreen();
+    await user.type(await screen.findByLabelText('Gewicht von Blau in Gramm'), '101');
+    await user.click(screen.getByRole('button', { name: 'Gewichte speichern (1)' }));
+    await waitFor(async () => expect(await db.weights.count()).toBe(2));
+    expect((await db.weights.toArray()).filter((entry) => entry.kittenId === 'k1')).toHaveLength(1);
+  });
+
+  it('zeigt nur lebende Kitten und erklärt den leeren oder fehlenden Wurf', async () => {
+    await seed([kitten('k1', 'red'), kitten('k2', 'blue', { stillborn: true }), kitten('k3', 'green', { saleStatus: 'deceased' })]);
+    const first = renderScreen();
     expect(await screen.findByLabelText('Gewicht von Rot in Gramm')).toBeInTheDocument();
     expect(screen.queryByLabelText('Gewicht von Blau in Gramm')).not.toBeInTheDocument();
-    expect(await screen.findByText(/2 Kitten werden nicht angezeigt/)).toBeInTheDocument();
-  });
-
-  it('erklärt den leeren Wurf statt eine leere Liste zu zeigen', async () => {
+    first.unmount();
     await seed([]);
-    renderScreen();
+    const second = renderScreen();
     expect(await screen.findByText('Noch keine Kitten erfasst')).toBeInTheDocument();
-  });
-
-  it('sagt Bescheid, wenn es den Wurf nicht gibt', async () => {
+    second.unmount();
     await wipeDatabase();
     renderScreen();
     expect(await screen.findByText('Wurf nicht gefunden')).toBeInTheDocument();

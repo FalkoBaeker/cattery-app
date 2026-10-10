@@ -13,7 +13,7 @@ import { kittenLabel } from '../../types';
 import type { CareTask, ID, Kitten, Litter, Settings, WeightEntry } from '../../types';
 import { dueState, syncLitterSchedule, type DueState } from '../../domain/schedule';
 import { formatDate, formatDateTime, formatRelativeDay } from '../../lib/date';
-import { toggleTaskDone } from './data';
+import { CareTaskSheet } from './CareTaskSheet';
 import { groupTasksByWeek } from './litter';
 import { CollarDot } from './parts';
 
@@ -51,6 +51,7 @@ export function ScheduleSection({
   const navigate = useNavigate();
   const toast = useToast();
   const [building, setBuilding] = useState(false);
+  const [editing, setEditing] = useState<CareTask | null>(null);
 
   const kittenById = useMemo(() => new Map(kittens.map((k) => [k.id, k])), [kittens]);
   const groups = useMemo(
@@ -69,15 +70,6 @@ export function ScheduleSection({
     }
     return { byKitten, newest };
   }, [weights]);
-
-  async function toggle(task: CareTask) {
-    try {
-      await toggleTaskDone(task.id, !task.doneAt);
-    } catch (e) {
-      toast.error('Konnte nicht gespeichert werden.');
-      console.error(e);
-    }
-  }
 
   /**
    * Nachträglich erzeugen. Nötig für Würfe, die vor dem Fahrplan angelegt
@@ -131,7 +123,7 @@ export function ScheduleSection({
   }
 
   return (
-    <Section title="Fahrplan" description="Abhaken, sobald erledigt">
+    <Section title="Fahrplan">
       <div className="flex flex-col gap-4">
         {groups.map((group) => (
           <div key={String(group.week)} className="flex flex-col gap-1">
@@ -159,11 +151,11 @@ export function ScheduleSection({
                   >
                     <button
                       type="button"
-                      onClick={() => toggle(task)}
+                      onClick={() => setEditing(task)}
                       aria-pressed={done}
-                      aria-label={done ? `${task.title} wieder öffnen` : `${task.title} abhaken`}
+                      aria-label={done ? `${task.title} bearbeiten` : `${task.title} eintragen`}
                       className={[
-                        'mt-0.5 flex size-11 shrink-0 items-center justify-center rounded-full border',
+                        'mt-0.5 flex size-11 shrink-0 items-center justify-center rounded-lg border',
                         done
                           ? 'border-transparent bg-ok text-white'
                           : 'border-border-strong text-text-faint active:bg-surface-2',
@@ -198,6 +190,7 @@ export function ScheduleSection({
                           ? `Erledigt am ${formatDate(task.doneAt)}`
                           : `${formatDate(task.dueDate)} · ${formatRelativeDay(task.dueDate)}`}
                       </span>
+                      {task.completedKittenDates && <span className="text-xs text-text-dim">{Object.keys(task.completedKittenDates).length} von {kittens.filter((item) => !item.stillborn && !item.diedAt && item.saleStatus !== 'deceased').length} Tieren erledigt</span>}
 
                       {task.detail && !needsWeight && (
                         <span className="text-[0.83rem] text-text-faint">{task.detail}</span>
@@ -228,6 +221,7 @@ export function ScheduleSection({
           </div>
         ))}
       </div>
+      {editing && <CareTaskSheet key={editing.id} task={editing} tasks={tasks} litter={litter} kittens={kittens} onClose={() => setEditing(null)} />}
     </Section>
   );
 }

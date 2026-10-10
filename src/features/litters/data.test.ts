@@ -19,6 +19,7 @@ import {
   markKittenDeceased,
   noonOf,
   revokeKittenDeath,
+  syncBirthWeightEntry,
   toggleTaskDone,
   updateSaleStatus,
 } from './data';
@@ -63,6 +64,32 @@ describe('ensureLitterBorn', () => {
 });
 
 describe('addKitten', () => {
+  it('übernimmt ein bestehendes Geburtsgewicht aus alten Sicherungen ohne doppelte Messung', async () => {
+    const litter = await makeLitter({ birthDate: '2026-03-01' });
+    const kitten = await addKitten({ litterId: litter.id, collarColor: 'gray', birthWeightG: 95, bornAt: '2026-03-01T08:00:00.000Z' }, settings);
+    const original = (await db.weights.where('kittenId').equals(kitten.id).toArray())[0];
+    await db.weights.update(original.id, { note: undefined });
+    await syncBirthWeightEntry(kitten, 95);
+    const entries = await db.weights.where('kittenId').equals(kitten.id).toArray();
+    expect(entries).toHaveLength(1);
+    expect(entries[0].id).toBe(original.id);
+    expect(entries[0].note).toBe('Geburtsgewicht');
+  });
+
+  it('zieht auch ein altes unmarkiertes Geburtsgewicht bei einer Datumskorrektur mit', async () => {
+    const litter = await makeLitter({ birthDate: '2026-03-01' });
+    const kitten = await addKitten({ litterId: litter.id, collarColor: 'red', birthWeightG: 95, bornAt: '2026-03-01T08:00:00.000Z' }, settings);
+    const original = (await db.weights.where('kittenId').equals(kitten.id).toArray())[0];
+    await db.weights.update(original.id, { note: undefined });
+    const correctedTime = '2026-03-02T08:00:00.000Z';
+    await db.kittens.update(kitten.id, { bornAt: correctedTime });
+    await syncBirthWeightEntry({ ...kitten, bornAt: correctedTime }, 95, kitten.bornAt);
+    const entries = await db.weights.where('kittenId').equals(kitten.id).toArray();
+    expect(entries).toHaveLength(1);
+    expect(entries[0].id).toBe(original.id);
+    expect(entries[0].at).toBe(correctedTime);
+  });
+
   it('macht aus dem Geburtsgewicht die erste Wiegung', async () => {
     const litter = await makeLitter();
     const at = nowISO();

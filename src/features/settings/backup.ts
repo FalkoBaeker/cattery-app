@@ -629,6 +629,7 @@ const ROW_SCHEMAS = {
     saleStatus: oneOf(Object.keys(KITTEN_SALE_STATUS_LABEL)),
     interestId: optional(isId),
     priceCents: optional(isSafeInteger),
+    handoverDate: optional(isISODate),
     diedAt: optional(isISODate),
     deathNote: optional(isString),
     photoAttachmentId: optional(isId),
@@ -654,6 +655,7 @@ const ROW_SCHEMAS = {
     title: isString,
     dueDate: isISODate,
     doneAt: optional(isISODate),
+    completedKittenDates: optional((value) => isRecord(value) && Object.entries(value).every(([id, date]) => isId(id) && isISODate(date))),
     litterId: optional(isId),
     kittenId: optional(isId),
     catId: optional(isId),
@@ -893,6 +895,7 @@ function validateBackupReferences(
     ]),
     check('careTasks', kittenIds, 'ein fehlendes Kitten', (row) => [
       row.kittenId as string | undefined,
+      ...Object.keys((row.completedKittenDates as Record<string, string> | undefined) ?? {}),
     ]),
     check('careTasks', catIds, 'ein fehlendes Zuchttier', (row) => [
       row.catId as string | undefined,

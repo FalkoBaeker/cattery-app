@@ -2,14 +2,14 @@
  * Schnellerfassung der Kittengewichte — der meistbenutzte Bildschirm der App.
  *
  * In Woche 1–2 wird zweimal täglich gewogen, mit einem Kitten in der Hand.
- * Deshalb: eine Zeile je Kitten, ein großes Zahlenfeld, sofort gespeichert,
- * Fokus springt weiter, jede Eingabe sofort korrigierbar.
+ * Eine Zeile je Kitten, ein gemeinsamer Zeitpunkt und ein atomar gespeicherter
+ * Durchgang. Enter springt weiter, bestehende Messungen bleiben korrigierbar.
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useLiveQuery } from 'dexie-react-hooks';
-import type { ID, ISODateTime, Kitten, WeightEntry } from '../../types';
+import type { ID, Kitten, WeightEntry } from '../../types';
 import { COLLAR_COLORS, DEFAULT_SETTINGS, collarColor, kittenLabel } from '../../types';
 import { db } from '../../db/db';
 import {
@@ -19,6 +19,7 @@ import {
   Card,
   ColorDot,
   EmptyState,
+  EventDateField,
   Icon,
   IconButton,
   List,
@@ -27,6 +28,8 @@ import {
   Sheet,
   Spinner,
   Stack,
+  TextInput,
+  useConfirm,
   useToast,
 } from '../../ui';
 import {
@@ -47,14 +50,14 @@ import {
   analyzeKitten,
   dayOfLifeLabel,
   dayProgress,
-  deltaToPrevious,
   latestDelta,
   measurementsOn,
   nextFocusId,
   parseGrams,
 } from './weighing';
 import type { WeightSample } from './chart';
-import { addWeight, deleteWeight } from './store';
+import { addWeightRound, deleteWeight } from './store';
+import { entriesOnDate, localDateTime, suggestedTime } from './backfill';
 import { WeightChart } from './WeightChart';
 import { EditWeightSheet, WeightHistory } from './WeightHistory';
 import { WeightBadge } from './WeightBadge';
@@ -106,6 +109,7 @@ export function WeighScreen() {
   const { litterId = '' } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
+  const confirm = useConfirm();
 
   const data = useLiveQuery(async () => {
     if (!litterId) return { kind: 'missing' as const };
@@ -136,35 +140,27 @@ export function WeighScreen() {
 
   const [drafts, setDrafts] = useState<Record<ID, number | null>>({});
   const draftsRef = useRef<Record<ID, number | null>>({});
-  /**
-   * Kitten, die im *laufenden Durchgang* erfasst wurden. Nur sie überspringt
-   * die Fokuskette. Der Tagesfortschritt (`progress.doneIds`) taugt dafür
-   * nicht: abends ist dort schon jedes Kitten vom Morgen eingetragen, die
-   * Kette würde alle überspringen und sofort abbrechen.
-   */
-  const roundRef = useRef<Set<ID>>(new Set());
   const [lastSaved, setLastSaved] = useState<Record<ID, { entryId: ID; grams: number }>>({});
-  const [pendingIds, setPendingIds] = useState<Set<ID>>(new Set());
-  const pendingRef = useRef<Set<ID>>(new Set());
-  const roundPromisesRef = useRef<Map<ID, Promise<boolean>>>(new Map());
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const [refDate, setRefDate] = useState(todayISO);
+  const [time, setTime] = useState('');
+  const [saveError, setSaveError] = useState('');
   const [focusedId, setFocusedId] = useState<ID | null>(null);
   const [detailId, setDetailId] = useState<ID | null>(null);
   const [editEntryId, setEditEntryId] = useState<ID | null>(null);
   const [chartOpen, setChartOpen] = useState(false);
+  const today = todayISO();
 
-  const refDate = todayISO();
-
-  // Ein neu geöffneter Kalendertag beginnt einen frischen aktuellen Durchgang.
-  useEffect(() => {
-    roundRef.current = new Set();
-    setLastSaved({});
-  }, [refDate]);
+  const dirtyCount = Object.values(drafts).filter((value) => value != null).length;
 
   /* --- Aufbereitete Daten ---------------------------------------- */
 
   const view = useMemo(() => {
     if (!data || data.kind !== 'ok') return null;
-    const alive = sortKittens(data.kittens.filter(isAlive));
+    const alive = sortKittens(data.kittens.filter((kitten) => isAlive(kitten) ||
+      (!kitten.stillborn && refDate < today && (!kitten.diedAt || refDate <= kitten.diedAt)),
+    ));
     const hidden = data.kittens.length - alive.length;
 
     const entriesByKitten = new Map<ID, WeightEntry[]>();
@@ -177,6 +173,9 @@ export function WeighScreen() {
 
     const samplesByKitten = new Map<ID, WeightSample[]>(
       [...entriesByKitten].map(([id, list]) => [id, list.map((e) => ({ at: e.at, grams: e.grams }))]),
+    );
+    const selectedSamples = new Map(
+      [...samplesByKitten].map(([id, list]) => [id, list.filter((entry) => dateOf(entry.at) <= refDate)]),
     );
 
     const order = alive.map((k) => k.id);
@@ -202,8 +201,8 @@ export function WeighScreen() {
         k.id,
         analyzeKitten({
           kittenId: k.id,
-          entries: samplesByKitten.get(k.id) ?? [],
-          litterEntries: samplesByKitten,
+          entries: selectedSamples.get(k.id) ?? [],
+          litterEntries: selectedSamples,
           birthWeightG: k.birthWeightG,
           birthDate: k.bornAt ? dateOf(k.bornAt) : data.litter.birthDate,
           birthAt: k.bornAt,
@@ -218,62 +217,74 @@ export function WeighScreen() {
       hidden,
       entriesByKitten,
       samplesByKitten,
+      selectedSamples,
       order,
       progress,
       series,
       analyses,
     };
-  }, [data, refDate]);
+  }, [data, refDate, today]);
 
   /* --- Schreiben --------------------------------------------------- */
 
   function setDraft(kittenId: ID, value: number | null) {
     draftsRef.current = { ...draftsRef.current, [kittenId]: value };
     setDrafts(draftsRef.current);
+    setSaveError('');
   }
 
-  function setPending(kittenId: ID, pending: boolean) {
-    const next = new Set(pendingRef.current);
-    if (pending) next.add(kittenId);
-    else next.delete(kittenId);
-    pendingRef.current = next;
-    setPendingIds(next);
-  }
-
-  async function persist(kitten: Kitten, grams: number, at: ISODateTime): Promise<boolean> {
-    try {
-      // Frisch aus der Datenbank lesen, damit der Vergleich auch bei zwei
-      // schnellen Eingaben hintereinander stimmt.
-      const before = await db.weights.where('kittenId').equals(kitten.id).toArray();
-      const entry = await addWeight(kitten.id, grams, at);
-      setDraft(kitten.id, null);
-      setLastSaved((s) => ({ ...s, [kitten.id]: { entryId: entry.id, grams } }));
-
-      const delta = deltaToPrevious(before, at, grams);
-      const parts = [`${kittenLabel(kitten)}: ${formatGrams(grams)}`];
-      if (delta) parts.push(formatGainG(delta.grams));
-      toast.show(parts.join(' · '), {
-        tone: 'ok',
-        icon: 'check-circle',
-        durationMs: 4500,
-        action: { label: 'Rückgängig', onClick: () => void undo(kitten.id, entry.id) },
+  async function changeDate(date: string) {
+    if (savingRef.current || date === refDate) return;
+    if (Object.values(draftsRef.current).some((value) => value != null)) {
+      const accepted = await confirm({
+        title: 'Wiegedatum ändern?',
+        message: 'Die ungespeicherten Gewichte bleiben erhalten und werden dem neuen Datum zugeordnet.',
+        confirmLabel: 'Datum ändern',
       });
-      return true;
-    } catch {
-      // Die Zahl bleibt im Feld stehen. So geht eine fehlgeschlagene
-      // IndexedDB-Schreiboperation nicht als vermeintlich erledigt unter.
-      roundRef.current.delete(kitten.id);
-      toast.error('Das Gewicht konnte nicht gespeichert werden.');
-      return false;
+      if (!accepted) return;
+    }
+    setRefDate(date);
+    setTime('');
+    setLastSaved({});
+    setSaveError('');
+  }
+
+  async function saveRound() {
+    if (!view || savingRef.current) return;
+    const weights = view.alive.flatMap((kitten) => {
+      const grams = draftsRef.current[kitten.id];
+      return grams == null ? [] : [{ kittenId: kitten.id, grams }];
+    });
+    if (!weights.length) return;
+    const fallbackTime = suggestedTime(entriesOnDate(view.weights, refDate));
+    const at = !time && refDate === todayISO() ? nowISO() : localDateTime(refDate, time || fallbackTime);
+    if (!at) {
+      setSaveError('Bitte ein gültiges Datum und eine gültige Uhrzeit wählen.');
+      return;
+    }
+    savingRef.current = true;
+    setSaving(true);
+    setSaveError('');
+    try {
+      const entries = await addWeightRound(weights, at);
+      draftsRef.current = {};
+      setDrafts({});
+      setLastSaved(Object.fromEntries(entries.map((entry) => [entry.kittenId, {
+        entryId: entry.id, grams: entry.grams,
+      }])));
+      setTime('');
+      toast.success(`${entries.length === 1 ? 'Gewicht' : `${entries.length} Gewichte`} gespeichert.`);
+    } catch (error) {
+      setSaveError(`${error instanceof Error ? error.message : 'Die Gewichte konnten nicht gespeichert werden.'} Die Eingaben bleiben erhalten.`);
     } finally {
-      setPending(kitten.id, false);
+      savingRef.current = false;
+      setSaving(false);
     }
   }
 
   async function undo(kittenId: ID, entryId: ID) {
     try {
       await deleteWeight(entryId);
-      roundRef.current.delete(kittenId);
       setLastSaved((s) => {
         const next = { ...s };
         delete next[kittenId];
@@ -285,13 +296,9 @@ export function WeighScreen() {
     }
   }
 
-  /**
-   * Übernimmt die Eingabe einer Zeile. Der Fokuswechsel passiert *vor* dem
-   * Speichern und damit noch im Antippen-Ereignis — nur so bleibt die
-   * Tastatur auf dem iPhone offen.
-   */
+  /** Fokuswechsel bleibt synchron, damit die Tastatur auf dem iPhone offen bleibt. */
   function commit(kitten: Kitten) {
-    if (pendingRef.current.has(kitten.id)) return;
+    if (savingRef.current) return;
     const raw = draftsRef.current[kitten.id];
     if (raw == null) return;
 
@@ -301,32 +308,17 @@ export function WeighScreen() {
       return;
     }
 
-    const at = nowISO();
-    roundRef.current.add(kitten.id);
-    setPending(kitten.id, true);
-
-    const savePromise = persist(kitten, parsed.grams, at);
-    roundPromisesRef.current.set(kitten.id, savePromise);
-
     const order = view?.order ?? [];
-    const next = nextFocusId(order, kitten.id, roundRef.current);
+    const filled = new Set(Object.entries(draftsRef.current).filter(([, value]) => value != null).map(([id]) => id));
+    const next = nextFocusId(order, kitten.id, filled);
 
     if (next) {
       const el = inputElement(next);
       el?.focus();
       el?.scrollIntoView({ block: 'center', behavior: 'smooth' });
     } else {
-      // Der Durchgang ist voll. Die nächste Eingabe beginnt einen neuen —
-      // zweimal täglich wiegen ist in Woche 1–2 der Normalfall.
       inputElement(kitten.id)?.blur();
-      const roundPromises = [...roundPromisesRef.current.values()];
-      void Promise.all(roundPromises).then((saved) => {
-        roundPromisesRef.current.clear();
-        if (!saved.every(Boolean)) return;
-
-        roundRef.current = new Set();
-        toast.success('Durchgang vollständig gespeichert');
-      });
+      document.getElementById('save-weight-round')?.focus();
     }
   }
 
@@ -373,6 +365,7 @@ export function WeighScreen() {
   const editEntry = editEntryId
     ? (view.weights.find((w) => w.id === editEntryId) ?? null)
     : null;
+  const editKitten = editEntry ? alive.find((kitten) => kitten.id === editEntry.kittenId) : undefined;
   const hasMultipleDailyMeasurements = progress.targetPerKitten > 1;
   const progressValue = hasMultipleDailyMeasurements
     ? progress.creditedMeasurements
@@ -388,6 +381,7 @@ export function WeighScreen() {
   if (alive.length === 0) {
     return (
       <Screen title="Wiegen" subtitle={subtitle} back>
+        <EventDateField label="Wiegedatum" value={refDate} onChange={(date) => void changeDate(date)} max={today} min={birthDate} required />
         <EmptyState
           icon="paw"
           title={hidden > 0 ? 'Keine Kitten zum Wiegen' : 'Noch keine Kitten erfasst'}
@@ -459,9 +453,25 @@ export function WeighScreen() {
             />
           </div>
 
-          <div className="mt-3 flex min-h-11 items-center justify-center gap-1.5 rounded-[var(--radius-field)] bg-ok-soft px-2 text-[0.85rem] font-medium text-ok">
-            <Icon name="check" size={16} />
-            Zeitpunkt: jetzt
+          <div className="mt-4 flex flex-col gap-3 border-t border-border pt-3">
+            <EventDateField
+              label="Wiegedatum"
+              value={refDate}
+              onChange={(date) => void changeDate(date)}
+              max={todayISO()}
+              disabled={saving}
+              required
+            />
+            <TextInput
+              label="Uhrzeit (optional)"
+              type="time"
+              value={time}
+              disabled={saving}
+              onChange={(event) => setTime(event.target.value)}
+            />
+            <p className="text-[0.82rem] text-text-dim">
+              Zeitpunkt: {time || (refDate === todayISO() ? 'jetzt' : `${suggestedTime(entriesOnDate(view.weights, refDate))} Uhr`)}
+            </p>
           </div>
         </Card>
 
@@ -474,16 +484,19 @@ export function WeighScreen() {
 
         {/* Die Zeilen */}
         <List>
-          {alive.map((k) => (
+          {alive.map((k) => {
+            const saved = view.weights.find((entry) => entry.id === lastSaved[k.id]?.entryId);
+            return (
             <WeighRow
               key={k.id}
               kitten={k}
-              entries={view.samplesByKitten.get(k.id) ?? []}
+              entries={view.selectedSamples.get(k.id) ?? []}
+              selectedEntries={entriesOnDate(view.entriesByKitten.get(k.id) ?? [], refDate)}
               refDate={refDate}
               level={view.analyses.get(k.id)?.level ?? 'unknown'}
               draft={drafts[k.id] ?? null}
-              lastSaved={lastSaved[k.id]}
-              pending={pendingIds.has(k.id)}
+              lastSaved={saved ? { entryId: saved.id, grams: saved.grams } : undefined}
+              pending={saving}
               onDraftChange={(v) => setDraft(k.id, v)}
               onCommit={() => commit(k)}
               onFocus={() => setFocusedId(k.id)}
@@ -501,8 +514,40 @@ export function WeighScreen() {
                 setEditEntryId(entryId);
               }}
             />
-          ))}
+            );
+          })}
         </List>
+
+        {saveError && <Callout tone="alert" icon="alert" title="Nicht gespeichert">{saveError}</Callout>}
+        <div className="flex flex-col gap-2">
+          <Button
+            id="save-weight-round"
+            variant="primary"
+            size="lg"
+            block
+            icon="check"
+            loading={saving}
+            disabled={dirtyCount === 0}
+            onClick={() => void saveRound()}
+          >
+            Gewichte speichern{dirtyCount > 0 ? ` (${dirtyCount})` : ''}
+          </Button>
+          {dirtyCount > 0 && (
+            <Button
+              block
+              variant="ghost"
+              icon="trash"
+              disabled={saving}
+              onClick={() => {
+                draftsRef.current = {};
+                setDrafts({});
+                setSaveError('');
+              }}
+            >
+              Eingaben verwerfen
+            </Button>
+          )}
+        </div>
 
         {hidden > 0 && (
           <p className="px-1 text-[0.82rem] text-text-faint">
@@ -542,7 +587,7 @@ export function WeighScreen() {
       <EditWeightSheet
         entry={editEntry}
         onClose={() => setEditEntryId(null)}
-        birthDate={birthDate}
+        birthDate={editKitten?.bornAt ? dateOf(editKitten.bornAt) : birthDate}
       />
 
       {/* Blatt: ein Kitten im Detail */}
@@ -572,6 +617,7 @@ export function WeighScreen() {
 interface WeighRowProps {
   kitten: Kitten;
   entries: WeightSample[];
+  selectedEntries: WeightEntry[];
   refDate: string;
   level: WeightLevel;
   draft: number | null;
@@ -589,6 +635,7 @@ interface WeighRowProps {
 function WeighRow({
   kitten,
   entries,
+  selectedEntries,
   refDate,
   level,
   draft,
@@ -620,12 +667,7 @@ function WeighRow({
   return (
     <div
       className="flex flex-col gap-2 px-4 py-3"
-      // Verlässt der Finger das Feld, wird der eingetippte Wert trotzdem
-      // gespeichert. Das Ereignis steigt vom Eingabefeld hierher auf.
-      onBlur={() => {
-        onBlur();
-        onCommit();
-      }}
+      onBlur={onBlur}
     >
       <div className="flex items-center gap-2.5">
         <ColorDot hex={collar.hex} size={16} />
@@ -662,7 +704,7 @@ function WeighRow({
           <Icon name="chevron-right" size={16} className="shrink-0 text-text-faint" />
         </button>
 
-        <div className="w-[7rem] shrink-0">
+        <div className="w-[8rem] shrink-0">
           <NumberInput
             id={`weigh-${kitten.id}`}
             value={draft}
@@ -674,7 +716,7 @@ function WeighRow({
             placeholder={last ? String(last.grams) : '—'}
             disabled={pending}
             aria-label={`Gewicht von ${label} in Gramm`}
-            className="h-13 text-right text-[1.3rem] font-semibold"
+            className="h-13 text-right text-lg font-semibold"
             onFocus={(e) => {
               onFocus();
               const el = e.currentTarget;
@@ -694,17 +736,21 @@ function WeighRow({
         </div>
       </div>
 
-      {draft != null && (
-        <Button
-          variant="primary"
-          size="md"
-          block
-          icon="check"
-          loading={pending}
-          onClick={onCommit}
-        >
-          {pending ? 'Wird gespeichert' : 'Speichern und weiter'}
-        </Button>
+      {selectedEntries.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {selectedEntries.map((entry) => (
+            <Button
+              key={entry.id}
+              size="sm"
+              variant="ghost"
+              icon="edit"
+              aria-label={`${label}: ${formatGrams(entry.grams)} um ${formatTime(entry.at)} Uhr ändern`}
+              onClick={() => onEdit(entry.id)}
+            >
+              {formatTime(entry.at)} Uhr · {formatGrams(entry.grams)}
+            </Button>
+          ))}
+        </div>
       )}
 
       {draft == null && lastSaved && (

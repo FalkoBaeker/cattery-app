@@ -147,7 +147,7 @@ export function Sheet({ open, onClose, title, action, children, footer, tall }: 
   return createPortal(
     <div className="fixed inset-0 z-50 flex flex-col justify-end">
       <div
-        className="absolute inset-0 animate-fade-in bg-black/40"
+        className="absolute inset-0 animate-fade-in bg-black/40 backdrop-blur-sm"
         onClick={onClose}
         aria-hidden="true"
       />
@@ -158,11 +158,11 @@ export function Sheet({ open, onClose, title, action, children, footer, tall }: 
         aria-label={title}
         tabIndex={-1}
         className={[
-          'relative flex animate-sheet-in flex-col rounded-t-[1.5rem] bg-bg shadow-[var(--shadow-sheet)] outline-none',
+          'sheet-surface relative flex animate-sheet-in flex-col rounded-t-[1.5rem] bg-bg shadow-[var(--shadow-sheet)] outline-none',
           tall ? 'h-[92dvh]' : 'max-h-[88dvh]',
         ].join(' ')}
       >
-        <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2.5">
+        <div className="screen-header flex shrink-0 items-center gap-2 border-b border-border px-3 py-2.5">
           <IconButton icon="x" label="Schließen" size="sm" onClick={onClose} />
           <h2 className="min-w-0 flex-1 truncate text-center text-[1rem] font-semibold">
             {title}
@@ -173,7 +173,7 @@ export function Sheet({ open, onClose, title, action, children, footer, tall }: 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4">{children}</div>
 
         {footer && (
-          <div className="shrink-0 border-t border-border bg-surface px-4 pt-3 safe-bottom">
+          <div className="pearl-panel shrink-0 border-t border-border bg-surface px-4 pt-3 safe-bottom">
             <div className="pb-3">{footer}</div>
           </div>
         )}
@@ -238,7 +238,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
               aria-modal="true"
               aria-label={state.title}
               tabIndex={-1}
-              className="relative w-full max-w-sm animate-fade-in rounded-[1.25rem] bg-surface p-5 shadow-[var(--shadow-raised)] outline-none"
+              className="pearl-panel relative w-full max-w-sm animate-fade-in rounded-[1.25rem] border border-border bg-surface p-5 shadow-[var(--shadow-raised)] outline-none"
             >
               <h2 className="text-[1.05rem] font-semibold text-text">{state.title}</h2>
               {state.message && (

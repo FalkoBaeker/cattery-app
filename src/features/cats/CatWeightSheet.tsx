@@ -3,11 +3,11 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import {
   Button,
   Callout,
+  EventDateTimeField,
   NumberInput,
   Sheet,
   Spinner,
   TextArea,
-  TextInput,
   useConfirm,
   useToast,
 } from '../../ui';
@@ -158,11 +158,10 @@ export function CatWeightSheet({
               if (error) setError(undefined);
             }}
           />
-          <TextInput
+          <EventDateTimeField
             label="Zeitpunkt"
-            type="datetime-local"
             value={at}
-            onChange={(e) => setAt(e.target.value)}
+            onChange={setAt}
           />
           <TextArea
             label="Notiz"

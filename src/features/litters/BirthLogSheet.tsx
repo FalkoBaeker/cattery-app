@@ -12,6 +12,8 @@ import {
   Callout,
   Card,
   EmptyState,
+  EventDateField,
+  EventDateTimeField,
   Icon,
   IconButton,
   NumberInput,
@@ -19,20 +21,26 @@ import {
   Sheet,
   Switch,
   TextArea,
+  TextInput,
   useConfirm,
   useToast,
   type IconName,
 } from '../../ui';
 import { BIRTH_EVENT_LABEL, collarColor } from '../../types';
 import type { BirthEvent, BirthEventKind, CollarColorKey, Kitten, Litter, Settings } from '../../types';
-import { db } from '../../db/db';
+import { db, patch, patchPlain } from '../../db/db';
 import { formatGrams } from '../../lib/format';
-import { formatTime, nowISO } from '../../lib/date';
+import { dateOf, formatDate, formatDateTime, formatTime, nowISO, toLocalInputValue, todayISO } from '../../lib/date';
+import { localDateTime } from '../weights/backfill';
+import { parseGrams } from '../weights/weighing';
+import { syncLitterSchedule } from '../../domain/schedule';
 import {
   addBirthEvent,
   addKitten,
+  BIRTH_WEIGHT_NOTE,
   deleteKitten,
   ensureLitterBorn,
+  syncBirthWeightEntry,
 } from './data';
 import {
   CONTRACTION_TREND_LABEL,
@@ -49,6 +57,34 @@ const EVENT_ICON: Record<BirthEventKind, IconName> = {
   placenta: 'check-circle',
   note: 'edit',
 };
+
+function eventTimestamp(date: string, time: string): string {
+  const at = !time && date === todayISO() ? nowISO() : localDateTime(date, time || '12:00');
+  if (!at) throw new Error('Bitte ein gültiges Datum und eine gültige Uhrzeit wählen.');
+  if (new Date(at).getTime() > Date.now()) throw new Error('Ein Ereignis darf nicht in der Zukunft liegen.');
+  return at;
+}
+
+async function earliestBirthDate(litterId: string): Promise<string | undefined> {
+  const kittens = await db.kittens.where('litterId').equals(litterId).toArray();
+  const events = await db.birthEvents.where('litterId').equals(litterId).toArray();
+  return [
+    ...kittens.flatMap((kitten) => kitten.bornAt ? [dateOf(kitten.bornAt)] : []),
+    ...events.filter((event) => event.kind === 'kitten_born').map((event) => dateOf(event.at)),
+  ].sort()[0];
+}
+
+async function alignLitterBirthDate(litterId: string, previousEarliest: string | undefined, settings: Settings) {
+  const litter = await db.litters.get(litterId);
+  if (!litter) throw new Error('Der Wurf existiert nicht mehr.');
+  const earliest = await earliestBirthDate(litterId);
+  if (!earliest) return;
+  const knownDate = litter.birthDate;
+  // A separately recorded earlier birth date may describe a kitten absent from the log.
+  const birthDate = knownDate && knownDate !== previousEarliest && knownDate < earliest ? knownDate : earliest;
+  await patch(db.litters, litterId, { birthDate, status: litter.status === 'completed' ? 'completed' : 'born' });
+  await syncLitterSchedule(litterId, settings);
+}
 
 export function BirthLogSheet({
   open,
@@ -72,6 +108,16 @@ export function BirthLogSheet({
   const [kittenSheet, setKittenSheet] = useState(false);
   const [noteSheet, setNoteSheet] = useState(false);
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
+  const [date, setDate] = useState(todayISO);
+  const [time, setTime] = useState('');
+  const [editing, setEditing] = useState<BirthEvent | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setDate(todayISO());
+    setTime('');
+  }, [open]);
 
   /* --- Wehen -------------------------------------------------------- */
 
@@ -104,14 +150,19 @@ export function BirthLogSheet({
   const kittenById = useMemo(() => new Map(kittens.map((k) => [k.id, k])), [kittens]);
   const bornCount = kittens.filter((k) => !k.stillborn).length;
 
-  async function record(kind: BirthEventKind, note?: string) {
+  async function record(kind: BirthEventKind, note?: string, selectedDate = date, selectedTime = time) {
+    if (busyRef.current) return false;
+    busyRef.current = true;
     setBusy(true);
     try {
-      await addBirthEvent(litter.id, kind, { note });
+      const at = eventTimestamp(selectedDate, selectedTime);
+      await addBirthEvent(litter.id, kind, { note, at });
+      return true;
     } catch (e) {
-      toast.error('Eintrag konnte nicht gespeichert werden.');
-      console.error(e);
+      toast.error(e instanceof Error ? e.message : 'Eintrag konnte nicht gespeichert werden.');
+      return false;
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   }
@@ -150,6 +201,9 @@ export function BirthLogSheet({
         }
       >
         <div className="flex flex-col gap-4">
+          <EventDateField label="Ereignisdatum" value={date} onChange={setDate} max={todayISO()} disabled={busy} required />
+          <TextInput label="Uhrzeit (optional)" type="time" value={time} onChange={(event) => setTime(event.target.value)} disabled={busy} />
+          <p className="text-sm text-text-dim">Zeitpunkt: {time || (date === todayISO() ? 'jetzt' : '12:00 Uhr')}</p>
           {/* --- Wehen-Timer ------------------------------------------ */}
           <Card>
             {stats.lastAt ? (
@@ -248,8 +302,15 @@ export function BirthLogSheet({
                       key={e.id}
                       className="flex items-start gap-3 border-b border-border py-2.5 last:border-b-0"
                     >
-                      <span className="w-12 shrink-0 pt-0.5 text-[0.85rem] tabular text-text-dim">
+                      <button
+                        type="button"
+                        onClick={() => setEditing(e)}
+                        className="flex min-h-11 min-w-0 flex-1 items-start gap-3 text-left"
+                        aria-label={`Eintrag ändern: ${BIRTH_EVENT_LABEL[e.kind]} · ${formatDateTime(e.at)}`}
+                      >
+                      <span className="w-18 shrink-0 pt-0.5 text-[0.85rem] tabular text-text-dim">
                         {formatTime(e.at)}
+                        <span className="block text-[0.72rem]">{formatDate(dateOf(e.at))}</span>
                       </span>
                       <Icon
                         name={EVENT_ICON[e.kind]}
@@ -287,6 +348,7 @@ export function BirthLogSheet({
                           </span>
                         )}
                       </span>
+                      </button>
                       {/* 44 px — ein löschender Knopf, oft nachts mit einer Hand bedient. */}
                       <IconButton
                         icon="trash"
@@ -310,15 +372,18 @@ export function BirthLogSheet({
         litter={litter}
         kittens={kittens}
         settings={settings}
+        initialDate={date}
+        initialTime={time}
       />
 
       <NoteSheet
         open={noteSheet}
         onClose={() => setNoteSheet(false)}
-        onSave={async (text) => {
-          await record('note', text);
-        }}
+        initialDate={date}
+        initialTime={time}
+        onSave={(text, selectedDate, selectedTime) => record('note', text, selectedDate, selectedTime)}
       />
+      {editing && <EditBirthEventSheet event={editing} settings={settings} onClose={() => setEditing(null)} />}
     </>
   );
 }
@@ -333,12 +398,16 @@ function BornKittenSheet({
   litter,
   kittens,
   settings,
+  initialDate,
+  initialTime,
 }: {
   open: boolean;
   onClose: () => void;
   litter: Litter;
   kittens: Kitten[];
   settings: Settings;
+  initialDate: string;
+  initialTime: string;
 }) {
   const toast = useToast();
   const used = useMemo(() => kittens.map((k) => k.collarColor), [kittens]);
@@ -346,6 +415,10 @@ function BornKittenSheet({
   const [grams, setGrams] = useState<number | null>(null);
   const [stillborn, setStillborn] = useState(false);
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const [date, setDate] = useState(initialDate);
+  const [time, setTime] = useState(initialTime);
+  const [error, setError] = useState<string>();
 
   // Nur beim Öffnen vorbelegen: Während der Geburt schreibt die App
   // dauernd, und jede Änderung würde sonst die Auswahl zurücksetzen.
@@ -360,33 +433,46 @@ function BornKittenSheet({
     setCollar(suggestCollarColor(used));
     setGrams(null);
     setStillborn(false);
-  }, [open, used]);
+    setDate(initialDate);
+    setTime(initialTime);
+    setError(undefined);
+  }, [open, used, initialDate, initialTime]);
 
   async function save() {
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
-    const at = nowISO();
     try {
-      await ensureLitterBorn(litter.id, at, settings);
-      const kitten = await addKitten(
-        {
-          litterId: litter.id,
-          collarColor: collar,
-          birthWeightG: grams ?? undefined,
-          bornAt: at,
-          stillborn,
-        },
-        settings,
-      );
-      await addBirthEvent(litter.id, 'kitten_born', {
-        kittenId: kitten.id,
-        at,
-        note: stillborn ? 'Totgeboren' : undefined,
+      const at = eventTimestamp(date, time);
+      const parsed = grams == null ? undefined : parseGrams(String(grams));
+      if (parsed && !parsed.ok) throw new Error(parsed.error);
+      await db.transaction('rw', db.litters, db.kittens, db.weights, db.birthEvents, db.careTasks, async () => {
+        const previousEarliest = await earliestBirthDate(litter.id);
+        await ensureLitterBorn(litter.id, at, settings);
+        const kitten = await addKitten(
+          {
+            litterId: litter.id,
+            collarColor: collar,
+            birthWeightG: parsed?.ok ? parsed.grams : undefined,
+            bornAt: at,
+            stillborn,
+          },
+          settings,
+        );
+        await addBirthEvent(litter.id, 'kitten_born', {
+          kittenId: kitten.id,
+          at,
+          note: stillborn ? 'Totgeboren' : undefined,
+        });
+        await alignLitterBirthDate(litter.id, previousEarliest, settings);
       });
       onClose();
     } catch (e) {
-      toast.error('Das Kitten konnte nicht gespeichert werden.');
-      console.error(e);
+      const message = e instanceof Error ? e.message : 'Das Kitten konnte nicht gespeichert werden.';
+      setError(`${message} Die Eingaben bleiben erhalten.`);
+      toast.error(message);
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   }
@@ -403,6 +489,10 @@ function BornKittenSheet({
       }
     >
       <div className="flex flex-col gap-4">
+        <EventDateField label="Geburtsdatum" value={date} onChange={setDate} max={todayISO()} disabled={saving} required />
+        <TextInput label="Uhrzeit (optional)" type="time" value={time} onChange={(event) => setTime(event.target.value)} disabled={saving} />
+        <p className="text-sm text-text-dim">Zeitpunkt: {time || (date === todayISO() ? 'jetzt' : '12:00 Uhr')}</p>
+        {error && <Callout tone="alert" icon="alert">{error}</Callout>}
         <p className="px-1 text-[0.88rem] leading-relaxed text-text-dim">
           Jetzt zählen nur Halsband und Gewicht. Geschlecht, Rufname und alles Weitere trägst du
           später in Ruhe nach.
@@ -449,17 +539,26 @@ function NoteSheet({
   open,
   onClose,
   onSave,
+  initialDate,
+  initialTime,
 }: {
   open: boolean;
   onClose: () => void;
-  onSave: (text: string) => Promise<void>;
+  onSave: (text: string, date: string, time: string) => Promise<boolean>;
+  initialDate: string;
+  initialTime: string;
 }) {
   const [text, setText] = useState('');
   const [saving, setSaving] = useState(false);
+  const [date, setDate] = useState(initialDate);
+  const [time, setTime] = useState(initialTime);
 
   useEffect(() => {
-    if (open) setText('');
-  }, [open]);
+    if (!open) return;
+    setText('');
+    setDate(initialDate);
+    setTime(initialTime);
+  }, [open, initialDate, initialTime]);
 
   async function save() {
     if (!text.trim()) {
@@ -467,9 +566,9 @@ function NoteSheet({
       return;
     }
     setSaving(true);
-    await onSave(text);
+    const saved = await onSave(text, date, time);
     setSaving(false);
-    onClose();
+    if (saved) onClose();
   }
 
   return (
@@ -483,13 +582,74 @@ function NoteSheet({
         </Button>
       }
     >
-      <TextArea
-        label="Was ist passiert?"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        rows={5}
-        placeholder="z. B. Fruchtblase geplatzt, unruhig, trinkt gut"
-      />
+      <div className="flex flex-col gap-4">
+        <EventDateField label="Ereignisdatum" value={date} onChange={setDate} max={todayISO()} disabled={saving} required />
+        <TextInput label="Uhrzeit (optional)" type="time" value={time} onChange={(event) => setTime(event.target.value)} disabled={saving} />
+        <TextArea
+          label="Was ist passiert?"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          rows={5}
+          placeholder="z. B. Fruchtblase geplatzt, unruhig, trinkt gut"
+        />
+      </div>
     </Sheet>
   );
+}
+
+function EditBirthEventSheet({ event, settings, onClose }: {
+  event: BirthEvent;
+  settings: Settings;
+  onClose: () => void;
+}) {
+  const [value, setValue] = useState(() => toLocalInputValue(event.at));
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const [error, setError] = useState<string>();
+  const toast = useToast();
+
+  async function save() {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    setError(undefined);
+    try {
+      const [date = '', time = ''] = value.split('T');
+      const at = eventTimestamp(date, time);
+      await db.transaction('rw', db.litters, db.kittens, db.weights, db.birthEvents, db.careTasks, async () => {
+        const current = await db.birthEvents.get(event.id);
+        if (!current) throw new Error('Der Eintrag wurde bereits gelöscht.');
+        const previousEarliest = await earliestBirthDate(current.litterId);
+        const timestamp = value === toLocalInputValue(current.at) ? current.at : at;
+        if (current.kind === 'kitten_born' && current.kittenId) {
+          const kitten = await db.kittens.get(current.kittenId);
+          if (!kitten) throw new Error('Das zugehörige Kitten existiert nicht mehr.');
+          const weights = await db.weights.where('kittenId').equals(kitten.id).toArray();
+          if (weights.some((entry) => entry.note !== BIRTH_WEIGHT_NOTE && entry.at < timestamp)) {
+            throw new Error('Eine vorhandene Wiegung liegt vor diesem Geburtszeitpunkt. Bitte zuerst die Wiegung korrigieren.');
+          }
+          if (kitten.diedAt && new Date(timestamp).getTime() > new Date(kitten.diedAt).getTime()) {
+            throw new Error('Die Geburt darf nicht nach dem Sterbezeitpunkt liegen.');
+          }
+          await patch(db.kittens, kitten.id, { bornAt: timestamp });
+          await syncBirthWeightEntry({ ...kitten, bornAt: timestamp }, kitten.birthWeightG, kitten.bornAt);
+        }
+        await patchPlain(db.birthEvents, current.id, { at: timestamp });
+        if (current.kind === 'kitten_born') await alignLitterBirthDate(current.litterId, previousEarliest, settings);
+      });
+      toast.success('Eintrag geändert.');
+      onClose();
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'Die Änderung konnte nicht gespeichert werden.');
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  }
+
+  return <Sheet open onClose={onClose} title="Eintrag ändern" footer={
+    <Button block variant="primary" icon="check" loading={saving} onClick={() => void save()}>Speichern</Button>
+  }>
+    <EventDateTimeField label="Ereignisdatum" value={value} onChange={setValue} max={toLocalInputValue(nowISO())} disabled={saving} required error={error} />
+  </Sheet>;
 }

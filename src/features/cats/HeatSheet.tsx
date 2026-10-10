@@ -3,10 +3,10 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import {
   Button,
   Callout,
+  EventDateField,
   Sheet,
   Spinner,
   TextArea,
-  TextInput,
   useConfirm,
   useToast,
 } from '../../ui';
@@ -153,34 +153,28 @@ export function HeatSheet({ open, onClose, catId, entryId }: HeatSheetProps) {
         </div>
       ) : (
         <div className="flex flex-col gap-5">
-          <TextInput
+          <EventDateField
             label="Beginn"
             required
-            type="date"
             value={startDate}
             error={startError}
-            onChange={(e) => {
-              setStartDate(e.target.value);
+            onChange={(value) => {
+              setStartDate(value);
               if (startError) setStartError(undefined);
               // Der Beginn kann die Ende-Meldung entkräften.
               if (endError) setEndError(undefined);
             }}
           />
-          <TextInput
+          <EventDateField
             label="Ende"
-            type="date"
             value={endDate}
             error={endError}
-            hint={
-              duration
-                ? `Dauer: ${duration} ${duration === 1 ? 'Tag' : 'Tage'}`
-                : 'Darf offen bleiben und später nachgetragen werden.'
-            }
-            onChange={(e) => {
-              setEndDate(e.target.value);
+            onChange={(value) => {
+              setEndDate(value);
               if (endError) setEndError(undefined);
             }}
           />
+          {duration && <p className="text-sm text-text-dim">Dauer: {duration} {duration === 1 ? 'Tag' : 'Tage'}</p>}
           <TextArea
             label="Notiz"
             rows={3}

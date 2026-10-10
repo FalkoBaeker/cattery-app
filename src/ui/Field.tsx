@@ -52,7 +52,7 @@ export function Field({ label, hint, error, required, children, className = '' }
 }
 
 const CONTROL_BASE =
-  'w-full rounded-[var(--radius-field)] border bg-surface px-3.5 py-2.5 text-text ' +
+  'ui-field w-full rounded-[var(--radius-field)] border bg-surface px-3.5 py-2.5 text-text ' +
   'placeholder:text-text-faint transition-colors ' +
   'disabled:bg-surface-2 disabled:text-text-faint';
 

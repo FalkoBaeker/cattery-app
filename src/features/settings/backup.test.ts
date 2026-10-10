@@ -278,6 +278,17 @@ describe('Anhänge', () => {
 });
 
 describe('Sicherung über alle Tabellen', () => {
+  it('erhält ein graues Halsband beim Sichern und Wiederherstellen', async () => {
+    await fillDatabase();
+    await db.kittens.update('kit-1', { collarColor: 'gray' });
+    const parsed = parseBackup(serializeBackup(await createBackup()));
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) throw new Error(parsed.error);
+    await wipeDatabase();
+    await restoreBackup(parsed.file);
+    expect((await db.kittens.get('kit-1'))?.collarColor).toBe('gray');
+  });
+
   it('sichert und stellt vollständig wieder her (Rundlauf)', async () => {
     await fillDatabase();
 

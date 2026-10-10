@@ -23,6 +23,7 @@ import {
   LITTER_STATUS_LABEL,
   SEX_LABEL,
   type CatStatus,
+  type CareTask,
   type HealthTestKind,
   type ID,
   type ISODate,
@@ -55,6 +56,7 @@ import { HealthTestSheet } from './HealthTestSheet';
 import { CatWeightSheet } from './CatWeightSheet';
 import { WeightTrend } from './WeightTrend';
 import { useSettingsValues } from '../../db/useSettings';
+import { CareTaskSheet } from '../litters/CareTaskSheet';
 
 /* ------------------------------------------------------------------ */
 /*  Kleinteile                                                         */
@@ -193,6 +195,8 @@ export function CatDetailScreen() {
   const [weightSheet, setWeightSheet] = useState<{ open: boolean; id?: ID }>({ open: false });
   const [openHistory, setOpenHistory] = useState<string[]>([]);
   const [fullTimeline, setFullTimeline] = useState(false);
+  const [careSheet, setCareSheet] = useState(false);
+  const [editingCare, setEditingCare] = useState<CareTask>();
 
   const heatAnalysis = useMemo(
     () => analyzeHeatCycles(heats ?? [], today),
@@ -470,6 +474,9 @@ export function CatDetailScreen() {
         {/* ---------------------------------------------------------- */}
         {/*  Würfe                                                      */}
         {/* ---------------------------------------------------------- */}
+        <Section title="Ereignisse" action={<Button icon="plus" size="sm" onClick={() => { setEditingCare(undefined); setCareSheet(true); }}>Eintragen</Button>}>
+          {(careTasks ?? []).length > 0 && <List>{[...(careTasks ?? [])].sort((a, b) => (b.doneAt ?? b.dueDate).localeCompare(a.doneAt ?? a.dueDate)).map((task) => <ListRow key={task.id} leading={<Icon name="calendar" size={18} />} title={task.title} subtitle={task.doneAt ? formatDate(task.doneAt) : `Fällig ${formatDate(task.dueDate)}`} onClick={() => { setEditingCare(task); setCareSheet(true); }} />)}</List>}
+        </Section>
         {settings.modules.litters && <Section title="Würfe">
           {litters === undefined ? (
             <SectionLoading />
@@ -665,6 +672,7 @@ export function CatDetailScreen() {
         defaultGrams={weightSheet.id ? undefined : lastWeight?.grams}
         onClose={() => setWeightSheet({ open: false })}
       />}
+      {careSheet && <CareTaskSheet task={editingCare} cat={cat} onClose={() => setCareSheet(false)} />}
     </Screen>
   );
 }

@@ -28,7 +28,7 @@ export function AppLayout() {
   }, [pathname]);
 
   return (
-    <div className="min-h-full">
+    <div className="app-surface min-h-full">
       <Suspense
         fallback={
           <div

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Button, Callout, Sheet, Stack, TextArea, useToast } from '../../ui';
+import { Button, Callout, EventDateTimeField, Sheet, Stack, TextArea, useToast } from '../../ui';
 import { db, insertPlain, patch } from '../../db/db';
-import { nowISO, formatDateTime } from '../../lib/date';
+import { formatDateTime, fromLocalInputValue, todayISO, toLocalInputValue } from '../../lib/date';
 import type { Appointment } from '../../types';
 import { appointmentTitle } from './reminders';
 
@@ -25,28 +25,40 @@ export function FollowUpSheet({
   const toast = useToast();
   const [text, setText] = useState('');
   const [saving, setSaving] = useState(false);
+  const [at, setAt] = useState('');
+  const eventTime = new Date(at).getTime();
+  const validAt = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(at) && Number.isFinite(eventTime) &&
+    toLocalInputValue(new Date(eventTime).toISOString()) === at && eventTime <= Date.now();
 
   useEffect(() => {
-    if (appointment) setText('');
+    if (appointment) {
+      setText('');
+      setAt(toLocalInputValue(appointment.startAt));
+    }
   }, [appointment]);
 
   async function save() {
     if (!appointment) return;
     const clean = text.trim();
+    if (clean && !validAt) {
+      toast.error('Bitte einen gültigen Zeitpunkt bis jetzt eintragen.');
+      return;
+    }
     setSaving(true);
     try {
       if (clean) {
         if (appointment.interestId) {
           await insertPlain(db.interestNotes, {
             interestId: appointment.interestId,
-            at: nowISO(),
+            at: fromLocalInputValue(at),
             channel: 'visit',
             text: clean,
           });
         } else {
           const previous = appointment.note?.trim();
+          const datedNote = `${formatDateTime(fromLocalInputValue(at))}\n${clean}`;
           await patch(db.appointments, appointment.id, {
-            note: previous ? `${previous}\n\n${clean}` : clean,
+            note: previous ? `${previous}\n\n${datedNote}` : datedNote,
           });
         }
       }
@@ -88,6 +100,14 @@ export function FollowUpSheet({
             <p className="font-medium text-text">{appointmentTitle(appointment)}</p>
             <p className="text-[0.85rem] text-text-dim">{formatDateTime(appointment.startAt)}</p>
           </div>
+
+          <EventDateTimeField
+            label="Datum des Besuchs"
+            value={at}
+            onChange={setAt}
+            max={todayISO()}
+            error={at && !validAt ? 'Bitte einen gültigen Zeitpunkt bis jetzt eintragen.' : undefined}
+          />
 
           <TextArea
             label="Notiz"
